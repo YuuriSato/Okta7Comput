@@ -608,6 +608,12 @@ app.delete("/api/computers/:id", authRequired, async (req, res) => {
   }
 });
 
+// Em deploy (Render), o mesmo serviço pode responder o frontend estatico.
+app.use(express.static(__dirname));
+app.get("/", (_req, res) => {
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
 app.use((err, _req, res, _next) => {
   if (err && err.message && String(err.message).includes("CORS")) {
     res.status(403).json({ message: err.message });

@@ -340,9 +340,9 @@
     </div>
 
     <script>
+      const hasHttpOrigin = window.location.origin && window.location.origin !== "null";
       window.APP_CONFIG = {
-        // Altere para a URL da sua API no Render quando publicar.
-        API_BASE_URL: "http://localhost:3000/api",
+        API_BASE_URL: hasHttpOrigin ? `${window.location.origin}/api` : "http://localhost:3000/api",
         // Fallback mock somente para ambiente sem backend.
         AUTH_USE_MOCK: false
       };
