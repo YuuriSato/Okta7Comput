@@ -16,6 +16,7 @@ const elements = {
   dashboardView: document.getElementById("view-dashboard"),
   computersView: document.getElementById("view-computadores"),
   emailsView: document.getElementById("view-emails"),
+  returnsView: document.getElementById("view-devolucoes"),
   modalLayer: document.getElementById("modal-layer"),
   modalTitle: document.getElementById("modal-title"),
   form: document.getElementById("computer-form"),
@@ -44,6 +45,17 @@ const elements = {
   corporateEmailFeedback: document.getElementById("corporate-email-feedback"),
   corporateEmailCount: document.getElementById("corporate-email-count"),
   corporateEmailTableBody: document.getElementById("corporate-email-table-body"),
+  returnForm: document.getElementById("return-form"),
+  returnComputerId: document.getElementById("return-computer-id"),
+  returnReturnedBy: document.getElementById("return-returned-by"),
+  returnConditionStatus: document.getElementById("return-condition-status"),
+  returnReason: document.getElementById("return-reason"),
+  returnsFeedback: document.getElementById("returns-feedback"),
+  returnsCount: document.getElementById("returns-count"),
+  returnsTableBody: document.getElementById("returns-table-body"),
+  flowHistoryCount: document.getElementById("flow-history-count"),
+  flowHistoryTableBody: document.getElementById("flow-history-table-body"),
+  refreshFlowHistory: document.getElementById("refresh-flow-history"),
 };
 
 const state = {
@@ -53,6 +65,8 @@ const state = {
   statusFilter: "todos",
   computers: [],
   corporateEmails: [],
+  returns: [],
+  flowHistory: [],
   theme: loadTheme(),
   auth: {
     user: loadUser(),
@@ -97,6 +111,19 @@ function setCorporateFeedback(message, kind = "ok") {
   }
   elements.corporateEmailFeedback.textContent = message;
   elements.corporateEmailFeedback.className =
+    kind === "error"
+      ? "mt-3 text-sm text-rose-600"
+      : "mt-3 text-sm text-emerald-600";
+}
+
+function setReturnsFeedback(message, kind = "ok") {
+  if (!message) {
+    elements.returnsFeedback.textContent = "";
+    elements.returnsFeedback.className = "mt-3 hidden text-sm";
+    return;
+  }
+  elements.returnsFeedback.textContent = message;
+  elements.returnsFeedback.className =
     kind === "error"
       ? "mt-3 text-sm text-rose-600"
       : "mt-3 text-sm text-emerald-600";
@@ -338,6 +365,7 @@ function renderTable() {
           <td class="px-4 py-4">
             <div class="flex justify-end gap-2">
               <button data-action="view" data-id="${computer.id}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">Ver</button>
+              <button data-action="history" data-id="${computer.id}" class="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Historico</button>
               <button data-action="edit" data-id="${computer.id}" class="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Editar</button>
               <button data-action="delete" data-id="${computer.id}" class="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">Deletar</button>
             </div>
@@ -352,6 +380,101 @@ function formatDate(dateString) {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) return "-";
   return date.toLocaleDateString("pt-BR");
+}
+
+function formatDateTime(dateString) {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("pt-BR");
+}
+
+function returnConditionBadge(condition) {
+  if (condition === "avariado") {
+    return '<span class="inline-flex rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">Avariado</span>';
+  }
+  if (condition === "manutencao") {
+    return '<span class="inline-flex rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Manutenção</span>';
+  }
+  return '<span class="inline-flex rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Bom</span>';
+}
+
+function flowEventLabel(eventType) {
+  if (eventType === "create") return "Cadastro";
+  if (eventType === "update") return "Atualização";
+  if (eventType === "delete") return "Exclusão";
+  if (eventType === "return") return "Devolução";
+  return "Evento";
+}
+
+function flowStatusText(fromStatus, toStatus) {
+  const from = fromStatus ? statusLabel(fromStatus) : "-";
+  const to = toStatus ? statusLabel(toStatus) : "-";
+  return `${from} -> ${to}`;
+}
+
+function renderReturnComputerOptions() {
+  const options = ['<option value="">Selecione um computador</option>'];
+  state.computers
+    .slice()
+    .sort((a, b) => String(a.serial).localeCompare(String(b.serial)))
+    .forEach((computer) => {
+      options.push(
+        `<option value="${escapeHtml(computer.id)}">${escapeHtml(computer.serial)} - ${escapeHtml(computer.owner || "-")} (${escapeHtml(statusLabel(computer.deviceStatus))})</option>`
+      );
+    });
+  elements.returnComputerId.innerHTML = options.join("");
+}
+
+function renderReturns() {
+  const rows = state.returns;
+  elements.returnsCount.textContent = `${rows.length} devolucao(oes)`;
+
+  if (!rows.length) {
+    elements.returnsTableBody.innerHTML = `
+      <tr>
+        <td colspan="4" class="px-4 py-8 text-center text-slate-500">Nenhuma devolucao registrada.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  elements.returnsTableBody.innerHTML = rows
+    .map((item) => `
+      <tr class="hover:bg-slate-50/80">
+        <td class="px-4 py-4 font-semibold">${escapeHtml(item.computerSerial)}</td>
+        <td class="px-4 py-4">${escapeHtml(item.returnedBy || "-")}</td>
+        <td class="px-4 py-4">${returnConditionBadge(item.conditionStatus)}</td>
+        <td class="px-4 py-4">${formatDateTime(item.createdAt)}</td>
+      </tr>
+    `)
+    .join("");
+}
+
+function renderFlowHistory() {
+  const rows = state.flowHistory;
+  elements.flowHistoryCount.textContent = `${rows.length} evento(s)`;
+
+  if (!rows.length) {
+    elements.flowHistoryTableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="px-4 py-8 text-center text-slate-500">Nenhum evento registrado.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  elements.flowHistoryTableBody.innerHTML = rows
+    .map((item) => `
+      <tr class="hover:bg-slate-50/80">
+        <td class="px-4 py-4">${formatDateTime(item.createdAt)}</td>
+        <td class="px-4 py-4 font-semibold">${escapeHtml(item.computerSerial || "-")}</td>
+        <td class="px-4 py-4">${escapeHtml(flowEventLabel(item.eventType))}</td>
+        <td class="px-4 py-4">${escapeHtml(flowStatusText(item.fromStatus, item.toStatus))}</td>
+        <td class="px-4 py-4">${escapeHtml(item.actorEmail || "-")}</td>
+        <td class="px-4 py-4">${escapeHtml(item.note || "-")}</td>
+      </tr>
+    `)
+    .join("");
 }
 
 function renderCorporateEmails() {
@@ -390,10 +513,14 @@ function render() {
   elements.dashboardView.classList.toggle("hidden", state.currentView !== "dashboard");
   elements.computersView.classList.toggle("hidden", state.currentView !== "computadores");
   elements.emailsView.classList.toggle("hidden", state.currentView !== "emails");
+  elements.returnsView.classList.toggle("hidden", state.currentView !== "devolucoes");
   renderNav();
   renderDashboard();
   renderTable();
   renderCorporateEmails();
+  renderReturnComputerOptions();
+  renderReturns();
+  renderFlowHistory();
   applyAuthGate();
 }
 
@@ -485,6 +612,53 @@ async function removeCorporateEmail(id) {
 
   await inventoryService.removeCorporateEmail(state.auth.token, id);
   await refreshInventoryData();
+}
+
+async function registerReturn(formData) {
+  const payload = {
+    computerId: Number(formData.get("computerId") || 0),
+    returnedBy: String(formData.get("returnedBy") || "").trim(),
+    conditionStatus: String(formData.get("conditionStatus") || "bom").trim().toLowerCase(),
+    reason: String(formData.get("reason") || "").trim()
+  };
+
+  if (!payload.computerId) {
+    throw new Error("Selecione o computador para devolucao.");
+  }
+  if (!payload.returnedBy) {
+    throw new Error("Informe quem realizou a devolucao.");
+  }
+  if (!state.auth.token) {
+    throw new Error("Sessao invalida. Faca login novamente.");
+  }
+
+  await inventoryService.createReturn(state.auth.token, payload);
+  await refreshInventoryData();
+}
+
+async function showComputerHistory(id) {
+  if (!state.auth.token) {
+    throw new Error("Sessao invalida. Faca login novamente.");
+  }
+
+  const history = await inventoryService.listComputerHistory(state.auth.token, id);
+  if (!history.length) {
+    window.alert("Nenhum historico encontrado para este computador.");
+    return;
+  }
+
+  const preview = history
+    .slice(0, 20)
+    .map((item) => {
+      const when = formatDateTime(item.createdAt);
+      const event = flowEventLabel(item.eventType);
+      const status = flowStatusText(item.fromStatus, item.toStatus);
+      const note = item.note || "-";
+      return `${when} | ${event} | ${status} | ${note}`;
+    })
+    .join("\n");
+
+  window.alert(preview);
 }
 
 function viewComputer(id) {
@@ -955,6 +1129,55 @@ const inventoryService = {
       throw new Error(result.message || "Falha ao remover email corporativo.");
     }
     return true;
+  },
+
+  async listReturns(token) {
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/returns`,
+      method: "GET",
+      token
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao carregar devolucoes.");
+    }
+    return Array.isArray(result.data.returns) ? result.data.returns : [];
+  },
+
+  async createReturn(token, payload) {
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/returns`,
+      method: "POST",
+      token,
+      body: payload
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao registrar devolucao.");
+    }
+    return result.data;
+  },
+
+  async listFlowHistory(token, limit = 200) {
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/flow-history?limit=${encodeURIComponent(limit)}`,
+      method: "GET",
+      token
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao carregar historico.");
+    }
+    return Array.isArray(result.data.history) ? result.data.history : [];
+  },
+
+  async listComputerHistory(token, id) {
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/computers/${encodeURIComponent(id)}/history`,
+      method: "GET",
+      token
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao carregar historico do computador.");
+    }
+    return Array.isArray(result.data.history) ? result.data.history : [];
   }
 };
 
@@ -962,17 +1185,23 @@ async function refreshInventoryData() {
   if (!state.auth.isAuthenticated || !state.auth.token) {
     state.computers = [];
     state.corporateEmails = [];
+    state.returns = [];
+    state.flowHistory = [];
     return;
   }
 
   // Carregamento em paralelo para reduzir tempo de espera apos login e refresh.
-  const [computers, corporateEmails] = await Promise.all([
+  const [computers, corporateEmails, returns, flowHistory] = await Promise.all([
     inventoryService.listComputers(state.auth.token),
-    inventoryService.listCorporateEmails(state.auth.token)
+    inventoryService.listCorporateEmails(state.auth.token),
+    inventoryService.listReturns(state.auth.token),
+    inventoryService.listFlowHistory(state.auth.token, 200)
   ]);
 
   state.computers = computers;
   state.corporateEmails = corporateEmails;
+  state.returns = returns;
+  state.flowHistory = flowHistory;
 }
 
 async function validateExistingSession() {
@@ -1027,6 +1256,8 @@ async function logout() {
   clearAuthSession();
   state.computers = [];
   state.corporateEmails = [];
+  state.returns = [];
+  state.flowHistory = [];
   closeModal();
   setAuthMode("login");
   setAuthError("");
@@ -1039,6 +1270,7 @@ function bindEvents() {
       if (!state.auth.isAuthenticated) return;
       state.currentView = button.dataset.nav;
       setCorporateFeedback("");
+      setReturnsFeedback("");
       render();
     });
   });
@@ -1108,12 +1340,43 @@ function bindEvents() {
     }
   });
 
+  elements.returnForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!state.auth.isAuthenticated) return;
+    try {
+      await registerReturn(new FormData(elements.returnForm));
+      elements.returnForm.reset();
+      setReturnsFeedback("Devolucao registrada com sucesso.");
+      render();
+    } catch (error) {
+      setReturnsFeedback(error.message || "Falha ao registrar devolucao.", "error");
+    }
+  });
+
+  elements.refreshFlowHistory.addEventListener("click", async () => {
+    if (!state.auth.isAuthenticated || !state.auth.token) return;
+    try {
+      state.flowHistory = await inventoryService.listFlowHistory(state.auth.token, 200);
+      renderFlowHistory();
+      setReturnsFeedback("Historico atualizado.");
+    } catch (error) {
+      setReturnsFeedback(error.message || "Falha ao atualizar historico.", "error");
+    }
+  });
+
   elements.tableBody.addEventListener("click", async (event) => {
     if (!state.auth.isAuthenticated) return;
     const button = event.target.closest("button[data-action]");
     if (!button) return;
     const { action, id } = button.dataset;
     if (action === "view") viewComputer(id);
+    if (action === "history") {
+      try {
+        await showComputerHistory(id);
+      } catch (error) {
+        window.alert(error.message || "Falha ao carregar historico.");
+      }
+    }
     if (action === "edit") {
       const computer = state.computers.find((item) => item.id === id);
       if (computer) openModal(computer);
