@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="./tailwind-config.js"></script>
     <link rel="stylesheet" href="./styles.css" />
-    <link rel="icon" href="https://media.licdn.com/dms/image/v2/D4D0BAQGG0VNerMgFnw/company-logo_200_200/company-logo_200_200/0/1721850150475/okta7_logo?e=2147483647&v=beta&t=PY-xh9fKfO7GrVQRfrFhCu17XjbjEdtI0XPRing4OUo" />
   </head>
   <body class="min-h-screen bg-slate-100 text-slate-900">
     <div id="app-shell" class="min-h-screen lg:flex">
@@ -18,7 +17,7 @@
 
         <nav class="space-y-1 px-3 pb-6 pt-4">
           <button data-nav="dashboard" class="nav-btn flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition hover:bg-slate-100">
-            <svg class="h-4 w-4" fill ="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7h18M3 12h18M3 17h18" />
             </svg>
             Dashboard
@@ -34,12 +33,6 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16v12H4V6zm1.6 1.4L12 12l6.4-4.6" />
             </svg>
             Email Corporativo
-          </button>
-          <button data-nav="devolucoes" class="nav-btn flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition hover:bg-slate-100">
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 12l2 2 4-4m5 2A9 9 0 1111 3a9 9 0 019 9z" />
-            </svg>
-            Devoluções
           </button>
         </nav>
 
@@ -181,89 +174,6 @@
                   </tr>
                 </thead>
                 <tbody id="corporate-email-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
-              </table>
-            </div>
-          </section>
-        </section>
-
-        <section id="view-devolucoes" class="hidden space-y-6">
-          <header>
-            <h1 class="text-4xl font-extrabold tracking-tight">Controle de Fluxo</h1>
-            <p class="mt-1 text-lg text-slate-600">Registre devoluções e acompanhe o histórico de alterações do inventário</p>
-          </header>
-
-          <section class="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
-              <h2 class="text-2xl font-bold">Registrar devolução</h2>
-              <p class="mt-1 text-slate-500">Ao devolver, o equipamento volta para estoque ou triagem.</p>
-              <form id="return-form" class="mt-5 space-y-4">
-                <label class="space-y-2 text-sm font-medium text-slate-700 block">
-                  <span>Computador</span>
-                  <select id="return-computer-id" name="computerId" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
-                    <option value="">Selecione um computador</option>
-                  </select>
-                </label>
-                <label class="space-y-2 text-sm font-medium text-slate-700 block">
-                  <span>Devolvido por</span>
-                  <input id="return-returned-by" name="returnedBy" required placeholder="Ex: João Silva" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
-                </label>
-                <label class="space-y-2 text-sm font-medium text-slate-700 block">
-                  <span>Condição do equipamento</span>
-                  <select id="return-condition-status" name="conditionStatus" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
-                    <option value="bom">Bom</option>
-                    <option value="avariado">Avariado</option>
-                    <option value="manutencao">Precisa manutenção</option>
-                  </select>
-                </label>
-                <label class="space-y-2 text-sm font-medium text-slate-700 block">
-                  <span>Motivo / observação</span>
-                  <textarea id="return-reason" name="reason" rows="3" placeholder="Descreva o motivo da devolução..." class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"></textarea>
-                </label>
-                <button type="submit" class="rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600">Registrar devolução</button>
-              </form>
-              <p id="returns-feedback" class="mt-3 hidden text-sm"></p>
-            </article>
-
-            <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
-              <h2 class="text-2xl font-bold">Últimas devoluções</h2>
-              <p id="returns-count" class="mt-1 text-slate-500">0 devolução(ões)</p>
-              <div class="mt-5 overflow-x-auto">
-                <table class="min-w-full border-collapse">
-                  <thead class="border-b border-slate-200 text-left text-sm font-semibold text-slate-600">
-                    <tr>
-                      <th class="px-4 py-3">Série</th>
-                      <th class="px-4 py-3">Devolvido por</th>
-                      <th class="px-4 py-3">Condição</th>
-                      <th class="px-4 py-3">Data</th>
-                    </tr>
-                  </thead>
-                  <tbody id="returns-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
-                </table>
-              </div>
-            </article>
-          </section>
-
-          <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 class="text-2xl font-bold">Histórico de alterações</h2>
-                <p id="flow-history-count" class="mt-1 text-slate-500">0 evento(s)</p>
-              </div>
-              <button id="refresh-flow-history" class="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50">Atualizar histórico</button>
-            </div>
-            <div class="mt-5 overflow-x-auto">
-              <table class="min-w-full border-collapse">
-                <thead class="border-b border-slate-200 text-left text-sm font-semibold text-slate-600">
-                  <tr>
-                    <th class="px-4 py-3">Data</th>
-                    <th class="px-4 py-3">Série</th>
-                    <th class="px-4 py-3">Evento</th>
-                    <th class="px-4 py-3">Status</th>
-                    <th class="px-4 py-3">Usuário</th>
-                    <th class="px-4 py-3">Resumo</th>
-                  </tr>
-                </thead>
-                <tbody id="flow-history-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
               </table>
             </div>
           </section>

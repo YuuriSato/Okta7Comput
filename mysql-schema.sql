@@ -52,49 +52,6 @@ CREATE TABLE IF NOT EXISTS computers (
     ON DELETE SET NULL
 );
 
-CREATE TABLE IF NOT EXISTS computer_returns (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  computer_id BIGINT UNSIGNED NOT NULL,
-  computer_serial VARCHAR(120) NOT NULL,
-  previous_owner_name VARCHAR(120) NULL,
-  previous_corporate_email VARCHAR(255) NULL,
-  returned_by VARCHAR(120) NOT NULL,
-  received_by_email VARCHAR(255) NOT NULL,
-  condition_status ENUM('bom','avariado','manutencao') NOT NULL DEFAULT 'bom',
-  reason TEXT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_returns_computer_id (computer_id),
-  KEY idx_returns_created_at (created_at),
-  CONSTRAINT fk_returns_computer
-    FOREIGN KEY (computer_id) REFERENCES computers (id)
-    ON UPDATE CASCADE
-    ON DELETE RESTRICT
-);
-
-CREATE TABLE IF NOT EXISTS computer_flow_history (
-  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  computer_id BIGINT UNSIGNED NULL,
-  computer_serial VARCHAR(120) NOT NULL,
-  event_type ENUM('create','update','delete','return') NOT NULL,
-  from_status ENUM('ativo','inativo','pendente') NULL,
-  to_status ENUM('ativo','inativo','pendente') NULL,
-  actor_user_id BIGINT UNSIGNED NULL,
-  actor_email VARCHAR(255) NOT NULL,
-  note TEXT NULL,
-  details_json JSON NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_flow_computer_id (computer_id),
-  KEY idx_flow_created_at (created_at),
-  CONSTRAINT fk_flow_computer
-    FOREIGN KEY (computer_id) REFERENCES computers (id)
-    ON UPDATE CASCADE
-    ON DELETE SET NULL,
-  CONSTRAINT fk_flow_actor_user
-    FOREIGN KEY (actor_user_id) REFERENCES users (id)
-    ON UPDATE CASCADE
-    ON DELETE SET NULL
-);
-
 -- Compatibilidade para bancos que ja tinham a versao antiga da tabela computers.
 -- (sem usar IF NOT EXISTS no ALTER, para compatibilidade ampla)
 
