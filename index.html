@@ -34,6 +34,12 @@
             </svg>
             Email Corporativo
           </button>
+          <button data-nav="devolucoes" class="nav-btn flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition hover:bg-slate-100">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5l-7 7 7 7M22 12H3" />
+            </svg>
+            Devoluções
+          </button>
         </nav>
 
         <div id="user-panel" class="border-t border-slate-200 px-4 py-4 lg:mt-auto">
@@ -174,6 +180,50 @@
                   </tr>
                 </thead>
                 <tbody id="corporate-email-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
+              </table>
+            </div>
+          </section>
+
+        </section>
+
+        <section id="view-devolucoes" class="hidden space-y-6">
+          <header>
+            <h1 class="text-4xl font-extrabold tracking-tight">Devoluções e Histórico</h1>
+            <p class="mt-1 text-lg text-slate-600">Gerencie devoluções e acompanhe histórico de alterações e troca de dono.</p>
+          </header>
+
+          <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+            <h2 class="text-2xl font-bold">Registrar devolução</h2>
+            <p class="mt-1 text-slate-500">Selecione um equipamento para marcar devolução e opcionalmente informar novo dono.</p>
+            <div class="mt-5 overflow-x-auto">
+              <table class="min-w-full border-collapse">
+                <thead class="border-b border-slate-200 text-left text-sm font-semibold text-slate-600">
+                  <tr>
+                    <th class="px-4 py-3">Série</th>
+                    <th class="px-4 py-3">Dono atual</th>
+                    <th class="px-4 py-3">Status</th>
+                    <th class="px-4 py-3 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="returns-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+            <h2 class="text-2xl font-bold">Histórico de alterações</h2>
+            <p id="history-count" class="mt-1 text-slate-500">0 evento(s)</p>
+            <div class="mt-5 overflow-x-auto">
+              <table class="min-w-full border-collapse">
+                <thead class="border-b border-slate-200 text-left text-sm font-semibold text-slate-600">
+                  <tr>
+                    <th class="px-4 py-3">Data</th>
+                    <th class="px-4 py-3">Série</th>
+                    <th class="px-4 py-3">Tipo</th>
+                    <th class="px-4 py-3">Mudança</th>
+                  </tr>
+                </thead>
+                <tbody id="history-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
               </table>
             </div>
           </section>
