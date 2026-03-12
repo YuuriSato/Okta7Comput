@@ -219,45 +219,51 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-async function findUserForLogin(email) {
-  try {
-    const [rows] = await pool.execute(
-      `SELECT u.id, u.email, u.password_hash, c.active
-       FROM users u
-       JOIN corporate_emails c ON c.id = u.corporate_email_id
-       WHERE u.email = ?
-       LIMIT 1`,
-      [email]
-    );
+const LOGIN_SCHEMA_ERROR_CODES = new Set(["ER_BAD_FIELD_ERROR", "ER_NO_SUCH_TABLE"]);
 
+async function tryLoginLookup(query, email) {
+  try {
+    const [rows] = await pool.execute(query, [email]);
     if (!rows.length) return null;
     return {
       id: Number(rows[0].id),
       email: rows[0].email,
       passwordHash: rows[0].password_hash,
-      active: Boolean(rows[0].active)
+      active: rows[0].active === undefined ? true : Boolean(rows[0].active)
     };
   } catch (error) {
-    if (!["ER_BAD_FIELD_ERROR", "ER_NO_SUCH_TABLE"].includes(error.code)) {
-      throw error;
+    if (LOGIN_SCHEMA_ERROR_CODES.has(error.code)) {
+      return null;
     }
-
-    const [legacyRows] = await pool.execute(
-      `SELECT id, email, password AS password_hash
-       FROM users
-       WHERE email = ?
-       LIMIT 1`,
-      [email]
-    );
-
-    if (!legacyRows.length) return null;
-    return {
-      id: Number(legacyRows[0].id),
-      email: legacyRows[0].email,
-      passwordHash: legacyRows[0].password_hash,
-      active: true
-    };
+    throw error;
   }
+}
+
+async function findUserForLogin(email) {
+  const queries = [
+    `SELECT u.id, u.email, u.password_hash, c.active
+     FROM users u
+     JOIN corporate_emails c ON c.id = u.corporate_email_id
+     WHERE u.email = ?
+     LIMIT 1`,
+    `SELECT id, email, password_hash, 1 AS active
+     FROM users
+     WHERE email = ?
+     LIMIT 1`,
+    `SELECT id, email, password AS password_hash, 1 AS active
+     FROM users
+     WHERE email = ?
+     LIMIT 1`
+  ];
+
+  for (const query of queries) {
+    const user = await tryLoginLookup(query, email);
+    if (user) {
+      return user;
+    }
+  }
+
+  return null;
 }
 
 app.post("/api/auth/login", async (req, res) => {
