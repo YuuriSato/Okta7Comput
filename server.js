@@ -45,7 +45,9 @@ const pool = mysql.createPool({
 });
 
 const app = express();
-app.use(cors({ origin: buildCorsOrigin(), credentials: true }));
+const corsOptions = { origin: buildCorsOrigin(), credentials: true };
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(express.json());
 
 function normalizeEmail(email) {
@@ -217,15 +219,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
-app.post("/api/auth/login", async (req, res) => {
-  const email = normalizeEmail(req.body?.email);
-  const password = String(req.body?.password || "");
-
-  if (!email || !password) {
-    res.status(400).json({ message: "Email e senha sao obrigatorios." });
-    return;
-  }
-
+async function findUserForLogin(email) {
   try {
     const [rows] = await pool.execute(
       `SELECT u.id, u.email, u.password_hash, c.active
@@ -236,24 +230,70 @@ app.post("/api/auth/login", async (req, res) => {
       [email]
     );
 
-    if (!rows.length) {
+    if (!rows.length) return null;
+    return {
+      id: Number(rows[0].id),
+      email: rows[0].email,
+      passwordHash: rows[0].password_hash,
+      active: Boolean(rows[0].active)
+    };
+  } catch (error) {
+    if (!["ER_BAD_FIELD_ERROR", "ER_NO_SUCH_TABLE"].includes(error.code)) {
+      throw error;
+    }
+
+    const [legacyRows] = await pool.execute(
+      `SELECT id, email, password AS password_hash
+       FROM users
+       WHERE email = ?
+       LIMIT 1`,
+      [email]
+    );
+
+    if (!legacyRows.length) return null;
+    return {
+      id: Number(legacyRows[0].id),
+      email: legacyRows[0].email,
+      passwordHash: legacyRows[0].password_hash,
+      active: true
+    };
+  }
+}
+
+app.post("/api/auth/login", async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const password = String(req.body?.password || "");
+
+  if (!email || !password) {
+    res.status(400).json({ message: "Email e senha sao obrigatorios." });
+    return;
+  }
+
+  try {
+    const user = await findUserForLogin(email);
+
+    if (!user) {
       res.status(401).json({ message: "Credenciais invalidas." });
       return;
     }
 
-    const user = rows[0];
     if (!user.active) {
       res.status(403).json({ message: "Email corporativo desativado." });
       return;
     }
 
-    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!user.passwordHash) {
+      res.status(401).json({ message: "Credenciais invalidas." });
+      return;
+    }
+
+    const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) {
       res.status(401).json({ message: "Credenciais invalidas." });
       return;
     }
 
-    const token = signAuthToken({ id: Number(user.id), email: user.email });
+    const token = signAuthToken({ id: user.id, email: user.email });
     res.json({ token, user: { email: user.email } });
   } catch (error) {
     res.status(500).json({ message: "Erro interno ao autenticar." });
@@ -381,6 +421,11 @@ app.delete("/api/corporate-emails/:id", authRequired, async (req, res) => {
 });
 
 function normalizeComputerPayload(body = {}) {
+  const parsedWarrantyMonths = Number(body.warrantyMonths);
+  const warrantyMonths = Number.isFinite(parsedWarrantyMonths) && parsedWarrantyMonths > 0
+    ? Math.floor(parsedWarrantyMonths)
+    : 0;
+
   const payload = {
     owner: String(body.owner || "").trim(),
     serial: String(body.serial || "").trim(),
@@ -388,7 +433,7 @@ function normalizeComputerPayload(body = {}) {
     deviceStatus: String(body.deviceStatus || "ativo").trim().toLowerCase(),
     corporateEmail: normalizeEmail(body.corporateEmail || ""),
     purchaseDate: String(body.purchaseDate || "").trim(),
-    warrantyMonths: Number(body.warrantyMonths || 0),
+    warrantyMonths,
     cpu: String(body.cpu || "").trim(),
     ram: String(body.ram || "").trim(),
     gpu: String(body.gpu || "").trim(),
@@ -408,9 +453,7 @@ function normalizeComputerPayload(body = {}) {
     payload.specs = specParts.join(" / ");
   }
 
-  payload.warrantyDays = Number.isFinite(payload.warrantyMonths) && payload.warrantyMonths > 0
-    ? Math.round(payload.warrantyMonths * 30)
-    : 0;
+  payload.warrantyDays = payload.warrantyMonths > 0 ? Math.round(payload.warrantyMonths * 30) : 0;
 
   return payload;
 }

@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: okta7comput
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DB_SSL
+        value: true
+      - key: AUTH_REQUIRE_PREAUTHORIZED_EMAIL
+        value: false

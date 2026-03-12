@@ -2,6 +2,7 @@
 const AUTH_TOKEN_KEY = "auth_token";
 const AUTH_USER_KEY = "auth_user";
 const MOCK_USERS_KEY = "mock_auth_users_v1";
+const HISTORY_EVENTS_KEY = "inventory_history_v1";
 const appConfig = window.APP_CONFIG || {};
 const defaultApiBase = window.location.origin && window.location.origin !== "null"
   ? `${window.location.origin}/api`
@@ -16,6 +17,7 @@ const elements = {
   dashboardView: document.getElementById("view-dashboard"),
   computersView: document.getElementById("view-computadores"),
   emailsView: document.getElementById("view-emails"),
+  returnsView: document.getElementById("view-devolucoes"),
   modalLayer: document.getElementById("modal-layer"),
   modalTitle: document.getElementById("modal-title"),
   form: document.getElementById("computer-form"),
@@ -44,6 +46,9 @@ const elements = {
   corporateEmailFeedback: document.getElementById("corporate-email-feedback"),
   corporateEmailCount: document.getElementById("corporate-email-count"),
   corporateEmailTableBody: document.getElementById("corporate-email-table-body"),
+  returnsTableBody: document.getElementById("returns-table-body"),
+  historyTableBody: document.getElementById("history-table-body"),
+  historyCount: document.getElementById("history-count"),
 };
 
 const state = {
@@ -53,6 +58,7 @@ const state = {
   statusFilter: "todos",
   computers: [],
   corporateEmails: [],
+  historyEvents: loadHistoryEvents(),
   theme: loadTheme(),
   auth: {
     user: loadUser(),
@@ -70,6 +76,119 @@ function loadUser() {
     return user && typeof user.email === "string" ? user : null;
   } catch (error) {
     return null;
+  }
+}
+
+function loadHistoryEvents() {
+  try {
+    const items = JSON.parse(localStorage.getItem(HISTORY_EVENTS_KEY) || "[]");
+    return Array.isArray(items) ? items : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function persistHistoryEvents() {
+  localStorage.setItem(HISTORY_EVENTS_KEY, JSON.stringify(state.historyEvents.slice(0, 500)));
+}
+
+function addHistoryEvent(event) {
+  state.historyEvents.unshift({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    at: new Date().toISOString(),
+    ...event
+  });
+  state.historyEvents = state.historyEvents.slice(0, 500);
+  persistHistoryEvents();
+}
+
+function historyTypeLabel(type) {
+  if (type === "owner_change") return "Troca de dono";
+  if (type === "return") return "Devolução";
+  return "Alteração";
+}
+
+function trackComputerChanges(previousComputer, nextComputer) {
+  if (!previousComputer || !nextComputer) return;
+
+  if ((previousComputer.owner || "") !== (nextComputer.owner || "")) {
+    addHistoryEvent({
+      type: "owner_change",
+      serial: nextComputer.serial,
+      machine: nextComputer.machine || "",
+      detail: `${previousComputer.owner || "-"} -> ${nextComputer.owner || "-"}`
+    });
+  }
+
+  const diffParts = [];
+  if ((previousComputer.deviceStatus || "") !== (nextComputer.deviceStatus || "")) {
+    diffParts.push(`Status: ${statusLabel(previousComputer.deviceStatus)} -> ${statusLabel(nextComputer.deviceStatus)}`);
+  }
+  if ((previousComputer.corporateEmail || "") !== (nextComputer.corporateEmail || "")) {
+    diffParts.push(`Email: ${previousComputer.corporateEmail || "-"} -> ${nextComputer.corporateEmail || "-"}`);
+  }
+  if (diffParts.length) {
+    addHistoryEvent({
+      type: "change",
+      serial: nextComputer.serial,
+      machine: nextComputer.machine || "",
+      detail: diffParts.join(" | ")
+    });
+  }
+}
+
+function buildComputerPayloadFromComputer(computer) {
+  return {
+    owner: computer.owner || "",
+    serial: computer.serial || "",
+    machine: computer.machine || "",
+    purchaseDate: computer.purchaseDate || "",
+    warrantyMonths: Number(computer.warrantyMonths || 0),
+    cpu: computer.cpu || "",
+    ram: computer.ram || "",
+    gpu: computer.gpu || "",
+    storage: computer.storage || "",
+    storageType: computer.storageType || "SSD",
+    deviceStatus: computer.deviceStatus || "ativo",
+    corporateEmail: computer.corporateEmail || "",
+    os: computer.os || "",
+    notes: computer.notes || "",
+    specs: computer.specs || buildSpecs(computer),
+    warrantyDays: Number(computer.warrantyDays || Number(computer.warrantyMonths || 0) * 30)
+  };
+}
+
+async function registerReturnForComputer(id) {
+  const computer = state.computers.find((item) => item.id === id);
+  if (!computer) throw new Error("Computador não encontrado.");
+  if (!state.auth.token) throw new Error("Sessão inválida. Faça login novamente.");
+
+  const suggestedOwner = "Estoque / TI";
+  const ownerInput = window.prompt("Novo dono após devolução (deixe vazio para manter):", suggestedOwner);
+  if (ownerInput === null) return;
+  const newOwner = String(ownerInput || "").trim() || computer.owner;
+
+  const noteInput = window.prompt("Observação da devolução (opcional):", "Devolvido pelo colaborador.");
+  if (noteInput === null) return;
+
+  const payload = buildComputerPayloadFromComputer(computer);
+  payload.owner = newOwner;
+  payload.deviceStatus = "inativo";
+  const note = String(noteInput || "").trim();
+  const returnStamp = `Devolução registrada em ${new Date().toLocaleString("pt-BR")}`;
+  payload.notes = [payload.notes, note, returnStamp].filter(Boolean).join(" | ");
+
+  await inventoryService.updateComputer(state.auth.token, computer.id, payload);
+  await refreshInventoryData();
+  const updated = state.computers.find((item) => item.id === id);
+  if (updated) {
+    trackComputerChanges(computer, updated);
+    addHistoryEvent({
+      type: "return",
+      serial: updated.serial,
+      machine: updated.machine || "",
+      detail: `${computer.owner || "-"} -> ${updated.owner || "-"}`
+    });
   }
 }
 
@@ -386,14 +505,60 @@ function renderCorporateEmails() {
     .join("");
 }
 
+function renderReturnsAndHistory() {
+  if (!state.computers.length) {
+    elements.returnsTableBody.innerHTML = `
+      <tr>
+        <td colspan="4" class="px-4 py-8 text-center text-slate-500">Nenhum computador cadastrado.</td>
+      </tr>
+    `;
+  } else {
+    elements.returnsTableBody.innerHTML = state.computers
+      .map((computer) => `
+        <tr class="hover:bg-slate-50/80">
+          <td class="px-4 py-4 font-semibold">${escapeHtml(computer.serial)}</td>
+          <td class="px-4 py-4">${escapeHtml(computer.owner || "-")}</td>
+          <td class="px-4 py-4">${deviceStatusBadge(computer.deviceStatus || "ativo")}</td>
+          <td class="px-4 py-4 text-right">
+            <button data-return-id="${computer.id}" class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100">Registrar devolução</button>
+          </td>
+        </tr>
+      `)
+      .join("");
+  }
+
+  elements.historyCount.textContent = `${state.historyEvents.length} evento(s)`;
+  if (!state.historyEvents.length) {
+    elements.historyTableBody.innerHTML = `
+      <tr>
+        <td colspan="4" class="px-4 py-8 text-center text-slate-500">Nenhum histórico registrado.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  elements.historyTableBody.innerHTML = state.historyEvents
+    .map((event) => `
+      <tr class="hover:bg-slate-50/80">
+        <td class="px-4 py-4">${escapeHtml(new Date(event.at).toLocaleString("pt-BR"))}</td>
+        <td class="px-4 py-4 font-medium">${escapeHtml(event.serial || "-")}</td>
+        <td class="px-4 py-4">${escapeHtml(historyTypeLabel(event.type))}</td>
+        <td class="px-4 py-4">${escapeHtml(event.detail || "-")}</td>
+      </tr>
+    `)
+    .join("");
+}
+
 function render() {
   elements.dashboardView.classList.toggle("hidden", state.currentView !== "dashboard");
   elements.computersView.classList.toggle("hidden", state.currentView !== "computadores");
   elements.emailsView.classList.toggle("hidden", state.currentView !== "emails");
+  elements.returnsView.classList.toggle("hidden", state.currentView !== "devolucoes");
   renderNav();
   renderDashboard();
   renderTable();
   renderCorporateEmails();
+  renderReturnsAndHistory();
   applyAuthGate();
 }
 
@@ -454,6 +619,10 @@ async function upsertComputer(formData) {
     throw new Error("Sessao invalida. Faca login novamente.");
   }
 
+  const previousComputer = state.editingId
+    ? state.computers.find((item) => item.id === state.editingId)
+    : null;
+
   if (state.editingId) {
     await inventoryService.updateComputer(state.auth.token, state.editingId, payload);
   } else {
@@ -461,6 +630,11 @@ async function upsertComputer(formData) {
   }
 
   await refreshInventoryData();
+
+  if (state.editingId && previousComputer) {
+    const updatedComputer = state.computers.find((item) => item.id === state.editingId);
+    trackComputerChanges(previousComputer, updatedComputer);
+  }
 }
 
 async function addCorporateEmail(emailValue) {
@@ -1105,6 +1279,18 @@ function bindEvents() {
       render();
     } catch (error) {
       setCorporateFeedback(error.message || "Falha ao remover email.", "error");
+    }
+  });
+
+  elements.returnsTableBody.addEventListener("click", async (event) => {
+    if (!state.auth.isAuthenticated) return;
+    const button = event.target.closest("button[data-return-id]");
+    if (!button) return;
+    try {
+      await registerReturnForComputer(button.dataset.returnId);
+      render();
+    } catch (error) {
+      window.alert(error.message || "Falha ao registrar devolução.");
     }
   });
 
