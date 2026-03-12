@@ -159,8 +159,9 @@ app.post("/api/auth/register", async (req, res) => {
     return;
   }
 
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     await connection.beginTransaction();
 
     const [existingUser] = await connection.execute("SELECT id FROM users WHERE email = ? LIMIT 1", [email]);
@@ -206,14 +207,29 @@ app.post("/api/auth/register", async (req, res) => {
     const token = signAuthToken(user);
     res.status(201).json({ token, user: { email: user.email } });
   } catch (error) {
-    await connection.rollback();
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch (_) {}
+    }
+    console.error("AUTH_REGISTER_ERROR", error.code || "NO_CODE", error.message);
     if (error.code === "ER_DUP_ENTRY") {
       res.status(409).json({ message: "Email ja cadastrado." });
       return;
     }
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      res.status(500).json({ message: "Banco sem schema aplicado. Rode o apply-schema e tente novamente." });
+      return;
+    }
+    if (error.code === "ER_ACCESS_DENIED_ERROR") {
+      res.status(500).json({ message: "Credenciais do banco invalidas. Verifique variaveis de ambiente." });
+      return;
+    }
     res.status(500).json({ message: "Erro interno ao cadastrar usuario." });
   } finally {
-    connection.release();
+    if (connection) {
+      connection.release();
+    }
   }
 });
 
@@ -256,6 +272,15 @@ app.post("/api/auth/login", async (req, res) => {
     const token = signAuthToken({ id: Number(user.id), email: user.email });
     res.json({ token, user: { email: user.email } });
   } catch (error) {
+    console.error("AUTH_LOGIN_ERROR", error.code || "NO_CODE", error.message);
+    if (error.code === "ER_NO_SUCH_TABLE") {
+      res.status(500).json({ message: "Banco sem schema aplicado. Rode o apply-schema e tente novamente." });
+      return;
+    }
+    if (error.code === "ER_ACCESS_DENIED_ERROR") {
+      res.status(500).json({ message: "Credenciais do banco invalidas. Verifique variaveis de ambiente." });
+      return;
+    }
     res.status(500).json({ message: "Erro interno ao autenticar." });
   }
 });
