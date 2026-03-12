@@ -16,6 +16,28 @@ const CORPORATE_EMAIL_DOMAIN = String(process.env.CORPORATE_EMAIL_DOMAIN || "okt
   .toLowerCase();
 const AUTH_REQUIRE_PREAUTHORIZED_EMAIL = String(process.env.AUTH_REQUIRE_PREAUTHORIZED_EMAIL || "false").toLowerCase() === "true";
 
+function parseDatabaseUrl() {
+  const rawUrl = process.env.DATABASE_URL || process.env.MYSQL_URL || process.env.DB_URL;
+  if (!rawUrl) return null;
+
+  try {
+    const parsed = new URL(rawUrl);
+    if (!parsed.hostname) return null;
+
+    const pathname = parsed.pathname.replace(/^\//, "").trim();
+    return {
+      host: parsed.hostname,
+      port: Number(parsed.port || 3306),
+      database: pathname || undefined,
+      user: decodeURIComponent(parsed.username || ""),
+      password: decodeURIComponent(parsed.password || "")
+    };
+  } catch (error) {
+    console.error("DB_URL_PARSE_ERROR", error.message);
+    return null;
+  }
+}
+
 function buildCorsOrigin() {
   const raw = String(process.env.API_CORS_ORIGIN || "*").trim();
   if (!raw || raw === "*") {
@@ -32,12 +54,14 @@ function buildCorsOrigin() {
   };
 }
 
+const databaseUrlConfig = parseDatabaseUrl();
+
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT || 3306),
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
+  host: process.env.DB_HOST || databaseUrlConfig?.host,
+  port: Number(process.env.DB_PORT || databaseUrlConfig?.port || 3306),
+  database: process.env.DB_NAME || databaseUrlConfig?.database,
+  user: process.env.DB_USER || databaseUrlConfig?.user,
+  password: process.env.DB_PASS || databaseUrlConfig?.password,
   ssl: DB_SSL ? { rejectUnauthorized: false } : undefined,
   waitForConnections: true,
   connectionLimit: 10,
