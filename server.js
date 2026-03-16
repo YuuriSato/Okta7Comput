@@ -159,6 +159,23 @@ function mapComputerRow(row) {
   };
 }
 
+function mapComputerMovementRow(row) {
+  return {
+    id: String(row.id),
+    computerId: String(row.computer_id),
+    movementType: row.movement_type || "devolucao",
+    serial: row.serial_number || "",
+    machine: row.machine_model || "",
+    previousOwner: row.previous_owner || "",
+    previousCorporateEmail: row.previous_corporate_email || "",
+    nextOwner: row.next_owner || "",
+    nextCorporateEmail: row.next_corporate_email || "",
+    reason: row.reason || "",
+    createdByEmail: row.created_by_email || "",
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+  };
+}
+
 async function getComputerById(id) {
   const [rows] = await pool.execute(
     `SELECT c.*, ce.email AS corporate_email
@@ -170,6 +187,18 @@ async function getComputerById(id) {
   );
   if (!rows.length) return null;
   return mapComputerRow(rows[0]);
+}
+
+async function listComputerMovements() {
+  const [rows] = await pool.execute(
+    `SELECT cm.*, c.serial_number, c.machine_model
+     FROM computer_movements cm
+     JOIN computers c ON c.id = cm.computer_id
+     ORDER BY cm.created_at DESC, cm.id DESC
+     LIMIT 200`
+  );
+
+  return rows.map(mapComputerMovementRow);
 }
 
 async function countUsers(connection) {
@@ -698,6 +727,130 @@ app.get("/api/audit-logs", authRequired, async (_req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Falha ao listar historico." });
+  }
+});
+
+app.get("/api/computer-movements", authRequired, async (_req, res) => {
+  try {
+    const movements = await listComputerMovements();
+    res.json({ movements });
+  } catch (error) {
+    res.status(500).json({ message: "Falha ao listar movimentacoes." });
+  }
+});
+
+app.post("/api/computer-movements", authRequired, async (req, res) => {
+  const computerId = Number(req.body?.computerId);
+  const movementType = String(req.body?.movementType || "").trim().toLowerCase();
+  const nextOwner = String(req.body?.nextOwner || "").trim();
+  const nextCorporateEmail = normalizeEmail(req.body?.nextCorporateEmail || "");
+  const reason = String(req.body?.reason || "").trim();
+
+  if (!Number.isFinite(computerId) || computerId <= 0) {
+    res.status(400).json({ message: "Computador invalido." });
+    return;
+  }
+  if (!["devolucao", "troca"].includes(movementType)) {
+    res.status(400).json({ message: "Tipo de movimentacao invalido." });
+    return;
+  }
+  if (movementType === "troca" && !nextOwner) {
+    res.status(400).json({ message: "Informe o novo responsavel para a troca." });
+    return;
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [computerRows] = await connection.execute(
+      `SELECT c.id, c.owner_name, c.serial_number, c.machine_model, ce.email AS corporate_email
+       FROM computers c
+       LEFT JOIN corporate_emails ce ON ce.id = c.corporate_email_id
+       WHERE c.id = ?
+       LIMIT 1`,
+      [computerId]
+    );
+
+    if (!computerRows.length) {
+      await connection.rollback();
+      res.status(404).json({ message: "Computador nao encontrado." });
+      return;
+    }
+
+    const computer = computerRows[0];
+    const resolvedEmailId = movementType === "troca"
+      ? await resolveCorporateEmailIdByEmail(connection, nextCorporateEmail)
+      : null;
+    const targetOwner = movementType === "devolucao" ? "Estoque" : nextOwner;
+    const targetEmail = movementType === "devolucao" ? "" : nextCorporateEmail;
+    const targetStatus = movementType === "devolucao" ? "pendente" : "ativo";
+
+    await connection.execute(
+      `UPDATE computers
+       SET owner_name = ?, corporate_email_id = ?, device_status = ?
+       WHERE id = ?`,
+      [targetOwner, resolvedEmailId, targetStatus, computerId]
+    );
+
+    const [movementInsert] = await connection.execute(
+      `INSERT INTO computer_movements (
+        computer_id,
+        movement_type,
+        previous_owner,
+        previous_corporate_email,
+        next_owner,
+        next_corporate_email,
+        reason,
+        created_by_user_id,
+        created_by_email
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        computerId,
+        movementType,
+        computer.owner_name || "",
+        computer.corporate_email || "",
+        targetOwner,
+        targetEmail,
+        reason || null,
+        req.auth.id,
+        req.auth.email
+      ]
+    );
+
+    await writeAuditLog({
+      connection,
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: movementType === "devolucao" ? "computer.return" : "computer.exchange",
+      entityType: "computer",
+      entityId: String(computerId),
+      description: movementType === "devolucao"
+        ? `Computador ${computer.serial_number} devolvido para estoque.`
+        : `Computador ${computer.serial_number} transferido para ${targetOwner}.`,
+      metadata: {
+        serial: computer.serial_number,
+        previousOwner: computer.owner_name || "",
+        previousCorporateEmail: computer.corporate_email || "",
+        nextOwner: targetOwner,
+        nextCorporateEmail: targetEmail,
+        reason
+      }
+    });
+
+    await connection.commit();
+    const movements = await listComputerMovements();
+    const created = movements.find((item) => item.id === String(movementInsert.insertId));
+    res.status(201).json({ movement: created || movements[0] || null });
+  } catch (error) {
+    await connection.rollback();
+    if (error.message === "EMAIL_NOT_ALLOWED") {
+      res.status(400).json({ message: "Email corporativo nao autorizado." });
+      return;
+    }
+    res.status(500).json({ message: "Falha ao registrar movimentacao." });
+  } finally {
+    connection.release();
   }
 });
 

@@ -37,6 +37,12 @@
             </svg>
             Email Corporativo
           </button>
+          <button data-nav="movimentacoes" class="nav-btn flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition hover:bg-slate-100">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7h8m-8 5h8m-8 5h4M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2zm0 0l0 0" />
+            </svg>
+            Devolução e Troca
+          </button>
           <button data-nav="permissoes" class="nav-btn flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition hover:bg-slate-100">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4l7 4v5c0 4.4-2.9 7.9-7 9-4.1-1.1-7-4.6-7-9V8l7-4z" />
@@ -191,6 +197,90 @@
                 <tbody id="corporate-email-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
               </table>
             </div>
+          </section>
+        </section>
+
+        <section id="view-movimentacoes" class="hidden space-y-6">
+          <header>
+            <h1 class="text-4xl font-extrabold tracking-tight">Devolução e Troca</h1>
+            <p class="mt-1 text-lg text-slate-600">Registre devoluções para estoque e trocas de responsável diretamente pelo sistema</p>
+          </header>
+
+          <section class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,420px)_1fr]">
+            <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <h2 class="text-2xl font-bold">Nova movimentação</h2>
+                  <p class="mt-1 text-sm text-slate-500">Escolha o computador e defina se ele volta para estoque ou vai para outro responsável.</p>
+                </div>
+              </div>
+
+              <form id="movement-form" class="mt-5 space-y-4">
+                <label class="block text-sm font-medium text-slate-700">
+                  Computador
+                  <select id="movement-computer" name="computerId" required class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"></select>
+                </label>
+
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <label class="block text-sm font-medium text-slate-700">
+                    Tipo de movimentação
+                    <select id="movement-type" name="movementType" class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+                      <option value="devolucao">Devolução</option>
+                      <option value="troca">Troca</option>
+                    </select>
+                  </label>
+                  <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <p><span class="font-semibold text-slate-800">Responsável atual:</span> <span id="movement-current-owner">-</span></p>
+                    <p class="mt-1"><span class="font-semibold text-slate-800">Email atual:</span> <span id="movement-current-email">-</span></p>
+                  </div>
+                </div>
+
+                <div id="movement-target-fields" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <label class="block text-sm font-medium text-slate-700">
+                    Novo responsável
+                    <input id="movement-next-owner" name="nextOwner" type="text" placeholder="Nome do novo responsável" class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+                  </label>
+                  <label class="block text-sm font-medium text-slate-700">
+                    Novo email corporativo
+                    <select id="movement-next-email" name="nextCorporateEmail" class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"></select>
+                  </label>
+                </div>
+
+                <label class="block text-sm font-medium text-slate-700">
+                  Motivo / observação
+                  <textarea id="movement-reason" name="reason" rows="4" placeholder="Ex.: devolvido por desligamento, troca entre equipes, manutenção..." class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"></textarea>
+                </label>
+
+                <p id="movement-feedback" class="hidden rounded-lg border px-3 py-2 text-sm"></p>
+
+                <button type="submit" class="w-full rounded-xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600">Registrar movimentação</button>
+              </form>
+            </article>
+
+            <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
+              <div class="flex items-center justify-between gap-4">
+                <div>
+                  <h2 class="text-2xl font-bold">Movimentações recentes</h2>
+                  <p id="movement-count" class="mt-1 text-slate-500">0 movimentação(ões)</p>
+                </div>
+              </div>
+              <div class="mt-5 overflow-x-auto">
+                <table class="min-w-full border-collapse">
+                  <thead class="border-b border-slate-200 text-left text-sm font-semibold text-slate-600">
+                    <tr>
+                      <th class="px-4 py-3">Quando</th>
+                      <th class="px-4 py-3">Tipo</th>
+                      <th class="px-4 py-3">Computador</th>
+                      <th class="px-4 py-3">De</th>
+                      <th class="px-4 py-3">Para</th>
+                      <th class="px-4 py-3">Motivo</th>
+                      <th class="px-4 py-3">Registrado por</th>
+                    </tr>
+                  </thead>
+                  <tbody id="movement-table-body" class="divide-y divide-slate-200 text-sm"></tbody>
+                </table>
+              </div>
+            </article>
           </section>
         </section>
 

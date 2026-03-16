@@ -73,6 +73,30 @@ CREATE TABLE IF NOT EXISTS computers (
     ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS computer_movements (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  computer_id BIGINT UNSIGNED NOT NULL,
+  movement_type ENUM('devolucao','troca') NOT NULL,
+  previous_owner VARCHAR(120) NULL,
+  previous_corporate_email VARCHAR(255) NULL,
+  next_owner VARCHAR(120) NULL,
+  next_corporate_email VARCHAR(255) NULL,
+  reason TEXT NULL,
+  created_by_user_id BIGINT UNSIGNED NULL,
+  created_by_email VARCHAR(255) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_computer_movements_created_at (created_at),
+  KEY idx_computer_movements_computer_id (computer_id),
+  CONSTRAINT fk_computer_movements_computer
+    FOREIGN KEY (computer_id) REFERENCES computers (id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE,
+  CONSTRAINT fk_computer_movements_created_by_user
+    FOREIGN KEY (created_by_user_id) REFERENCES users (id)
+    ON UPDATE CASCADE
+    ON DELETE SET NULL
+);
+
 -- Compatibilidade para bancos que ja tinham a versao antiga da tabela computers.
 -- (sem usar IF NOT EXISTS no ALTER, para compatibilidade ampla)
 

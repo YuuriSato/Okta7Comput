@@ -4,6 +4,7 @@ const AUTH_USER_KEY = "auth_user";
 const MOCK_USERS_KEY = "mock_auth_users_v1";
 const MOCK_COMPUTERS_KEY = "mock_inventory_computers_v1";
 const MOCK_CORPORATE_EMAILS_KEY = "mock_inventory_corporate_emails_v1";
+const MOCK_COMPUTER_MOVEMENTS_KEY = "mock_inventory_computer_movements_v1";
 const appConfig = window.APP_CONFIG || {};
 const defaultApiBase = window.location.origin && window.location.origin !== "null"
   ? `${window.location.origin}/api`
@@ -18,6 +19,7 @@ const elements = {
   dashboardView: document.getElementById("view-dashboard"),
   computersView: document.getElementById("view-computadores"),
   emailsView: document.getElementById("view-emails"),
+  movementsView: document.getElementById("view-movimentacoes"),
   permissionsView: document.getElementById("view-permissoes"),
   historyView: document.getElementById("view-historico"),
   modalLayer: document.getElementById("modal-layer"),
@@ -53,6 +55,18 @@ const elements = {
   corporateEmailFeedback: document.getElementById("corporate-email-feedback"),
   corporateEmailCount: document.getElementById("corporate-email-count"),
   corporateEmailTableBody: document.getElementById("corporate-email-table-body"),
+  movementForm: document.getElementById("movement-form"),
+  movementComputer: document.getElementById("movement-computer"),
+  movementType: document.getElementById("movement-type"),
+  movementCurrentOwner: document.getElementById("movement-current-owner"),
+  movementCurrentEmail: document.getElementById("movement-current-email"),
+  movementTargetFields: document.getElementById("movement-target-fields"),
+  movementNextOwner: document.getElementById("movement-next-owner"),
+  movementNextEmail: document.getElementById("movement-next-email"),
+  movementReason: document.getElementById("movement-reason"),
+  movementFeedback: document.getElementById("movement-feedback"),
+  movementCount: document.getElementById("movement-count"),
+  movementTableBody: document.getElementById("movement-table-body"),
   usersCount: document.getElementById("users-count"),
   usersTableBody: document.getElementById("users-table-body"),
   permissionsFeedback: document.getElementById("permissions-feedback"),
@@ -67,6 +81,7 @@ const state = {
   statusFilter: "todos",
   computers: [],
   corporateEmails: [],
+  computerMovements: [],
   users: [],
   auditLogs: [],
   theme: loadTheme(),
@@ -122,6 +137,19 @@ function setCorporateFeedback(message, kind = "ok") {
     kind === "error"
       ? "mt-3 text-sm text-rose-600"
       : "mt-3 text-sm text-emerald-600";
+}
+
+function setMovementFeedback(message = "", kind = "ok") {
+  if (!message) {
+    elements.movementFeedback.textContent = "";
+    elements.movementFeedback.className = "hidden rounded-lg border px-3 py-2 text-sm";
+    return;
+  }
+
+  elements.movementFeedback.textContent = message;
+  elements.movementFeedback.className = kind === "error"
+    ? "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
+    : "rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700";
 }
 
 function persistAuthSession(payload) {
@@ -276,6 +304,51 @@ function renderCorporateEmailOptions(selectedEmail = "") {
     options.push(`<option value="${escapeHtml(item.email)}" ${selected}>${escapeHtml(item.email)}</option>`);
   });
   elements.computerCorporateEmail.innerHTML = options.join("");
+}
+
+function renderMovementComputerOptions(selectedId = "") {
+  const options = ['<option value="">Selecione um computador</option>'];
+  state.computers.forEach((computer) => {
+    const selected = computer.id === selectedId ? "selected" : "";
+    options.push(
+      `<option value="${escapeHtml(computer.id)}" ${selected}>${escapeHtml(computer.serial)} - ${escapeHtml(computer.owner || "Sem responsável")}</option>`
+    );
+  });
+  elements.movementComputer.innerHTML = options.join("");
+}
+
+function renderMovementEmailOptions(selectedEmail = "") {
+  const options = ['<option value="">Sem vínculo</option>'];
+  state.corporateEmails.forEach((item) => {
+    const selected = item.email === selectedEmail ? "selected" : "";
+    options.push(`<option value="${escapeHtml(item.email)}" ${selected}>${escapeHtml(item.email)}</option>`);
+  });
+  elements.movementNextEmail.innerHTML = options.join("");
+}
+
+function movementTypeBadge(type) {
+  if (type === "troca") {
+    return '<span class="inline-flex rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">Troca</span>';
+  }
+  return '<span class="inline-flex rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Devolução</span>';
+}
+
+function syncMovementForm() {
+  const selectedComputer = state.computers.find((item) => item.id === elements.movementComputer.value);
+  const movementType = String(elements.movementType.value || "devolucao").toLowerCase();
+  const isExchange = movementType === "troca";
+
+  elements.movementCurrentOwner.textContent = selectedComputer?.owner || "-";
+  elements.movementCurrentEmail.textContent = selectedComputer?.corporateEmail || "-";
+  elements.movementTargetFields.classList.toggle("opacity-70", !isExchange);
+  elements.movementNextOwner.disabled = !isExchange;
+  elements.movementNextEmail.disabled = !isExchange;
+  elements.movementNextOwner.required = isExchange;
+
+  if (!isExchange) {
+    elements.movementNextOwner.value = "";
+    elements.movementNextEmail.value = "";
+  }
 }
 
 function isAdmin() {
@@ -455,6 +528,51 @@ function renderCorporateEmails() {
     .join("");
 }
 
+function renderMovements() {
+  renderMovementComputerOptions(elements.movementComputer.value);
+  renderMovementEmailOptions(elements.movementNextEmail.value);
+  syncMovementForm();
+
+  const rows = state.computerMovements;
+  elements.movementCount.textContent = `${rows.length} movimentação(ões)`;
+
+  if (!rows.length) {
+    elements.movementTableBody.innerHTML = `
+      <tr>
+        <td colspan="7" class="px-4 py-8 text-center text-slate-500">Nenhuma movimentação registrada.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  elements.movementTableBody.innerHTML = rows.map((movement) => `
+    <tr class="hover:bg-slate-50/80">
+      <td class="px-4 py-4">${new Date(movement.createdAt).toLocaleString("pt-BR")}</td>
+      <td class="px-4 py-4">${movementTypeBadge(movement.movementType)}</td>
+      <td class="px-4 py-4">
+        <div class="space-y-1">
+          <p class="font-semibold">${escapeHtml(movement.serial || "-")}</p>
+          <p class="text-xs text-slate-500">${escapeHtml(movement.machine || "-")}</p>
+        </div>
+      </td>
+      <td class="px-4 py-4">
+        <div class="space-y-1">
+          <p>${escapeHtml(movement.previousOwner || "-")}</p>
+          <p class="text-xs text-slate-500">${escapeHtml(movement.previousCorporateEmail || "-")}</p>
+        </div>
+      </td>
+      <td class="px-4 py-4">
+        <div class="space-y-1">
+          <p>${escapeHtml(movement.nextOwner || (movement.movementType === "devolucao" ? "Estoque" : "-"))}</p>
+          <p class="text-xs text-slate-500">${escapeHtml(movement.nextCorporateEmail || "-")}</p>
+        </div>
+      </td>
+      <td class="px-4 py-4">${escapeHtml(movement.reason || "-")}</td>
+      <td class="px-4 py-4">${escapeHtml(movement.createdByEmail || "-")}</td>
+    </tr>
+  `).join("");
+}
+
 function setPermissionsFeedback(message = "", kind = "muted") {
   elements.permissionsFeedback.textContent = message;
   elements.permissionsFeedback.className =
@@ -530,12 +648,14 @@ function render() {
   elements.dashboardView.classList.toggle("hidden", state.currentView !== "dashboard");
   elements.computersView.classList.toggle("hidden", state.currentView !== "computadores");
   elements.emailsView.classList.toggle("hidden", state.currentView !== "emails");
+  elements.movementsView.classList.toggle("hidden", state.currentView !== "movimentacoes");
   elements.permissionsView.classList.toggle("hidden", state.currentView !== "permissoes");
   elements.historyView.classList.toggle("hidden", state.currentView !== "historico");
   renderNav();
   renderDashboard();
   renderTable();
   renderCorporateEmails();
+  renderMovements();
   renderPermissions();
   renderAuditLogs();
   applyAuthGate();
@@ -629,6 +749,38 @@ async function removeCorporateEmail(id) {
   }
 
   await inventoryService.removeCorporateEmail(state.auth.token, id);
+  await refreshInventoryData();
+}
+
+async function createComputerMovement(formData) {
+  if (!state.auth.token) {
+    throw new Error("Sessao invalida. Faca login novamente.");
+  }
+
+  const movementType = String(formData.get("movementType") || "devolucao").trim().toLowerCase();
+  const payload = {
+    computerId: String(formData.get("computerId") || "").trim(),
+    movementType,
+    nextOwner: String(formData.get("nextOwner") || "").trim(),
+    nextCorporateEmail: String(formData.get("nextCorporateEmail") || "").trim().toLowerCase(),
+    reason: String(formData.get("reason") || "").trim()
+  };
+
+  if (!payload.computerId) {
+    throw new Error("Selecione um computador.");
+  }
+  if (!["devolucao", "troca"].includes(movementType)) {
+    throw new Error("Tipo de movimentacao invalido.");
+  }
+  if (movementType === "troca" && !payload.nextOwner) {
+    throw new Error("Informe o novo responsavel para a troca.");
+  }
+  if (movementType === "devolucao") {
+    payload.nextOwner = "";
+    payload.nextCorporateEmail = "";
+  }
+
+  await inventoryService.createComputerMovement(state.auth.token, payload);
   await refreshInventoryData();
 }
 
@@ -893,6 +1045,19 @@ function writeMockCorporateEmails(emails) {
   localStorage.setItem(MOCK_CORPORATE_EMAILS_KEY, JSON.stringify(emails));
 }
 
+function readMockComputerMovements() {
+  try {
+    const movements = JSON.parse(localStorage.getItem(MOCK_COMPUTER_MOVEMENTS_KEY) || "[]");
+    return Array.isArray(movements) ? movements : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeMockComputerMovements(movements) {
+  localStorage.setItem(MOCK_COMPUTER_MOVEMENTS_KEY, JSON.stringify(movements));
+}
+
 function buildMockId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -955,6 +1120,23 @@ function buildMockCorporateEmailsWithCounts() {
       machineCount: computers.filter((computer) => computer.corporateEmail === item.email).length
     }))
   );
+}
+
+function normalizeMockComputerMovement(payload, computer, actorEmail) {
+  return {
+    id: buildMockId("move"),
+    computerId: computer.id,
+    movementType: String(payload.movementType || "devolucao").trim().toLowerCase(),
+    serial: computer.serial,
+    machine: computer.machine,
+    previousOwner: computer.owner,
+    previousCorporateEmail: computer.corporateEmail || "",
+    nextOwner: String(payload.nextOwner || "").trim(),
+    nextCorporateEmail: String(payload.nextCorporateEmail || "").trim().toLowerCase(),
+    reason: String(payload.reason || "").trim(),
+    createdByEmail: actorEmail,
+    createdAt: new Date().toISOString()
+  };
 }
 
 function buildMockToken(email) {
@@ -1102,6 +1284,48 @@ const mockInventoryService = {
     );
     writeMockComputers(computers);
     return true;
+  },
+
+  async listComputerMovements() {
+    return sortByCreatedAtDesc(readMockComputerMovements());
+  },
+
+  async createComputerMovement(token, payload) {
+    const computers = readMockComputers();
+    const corporateEmails = readMockCorporateEmails();
+    const computer = computers.find((item) => item.id === payload.computerId);
+
+    if (!computer) {
+      throw new Error("Computador nao encontrado.");
+    }
+
+    const movementType = String(payload.movementType || "").trim().toLowerCase();
+    if (!["devolucao", "troca"].includes(movementType)) {
+      throw new Error("Tipo de movimentacao invalido.");
+    }
+
+    if (movementType === "troca" && !String(payload.nextOwner || "").trim()) {
+      throw new Error("Informe o novo responsavel para a troca.");
+    }
+
+    if (payload.nextCorporateEmail && !corporateEmails.some((item) => item.email === payload.nextCorporateEmail)) {
+      throw new Error("Email corporativo nao autorizado.");
+    }
+
+    const actorEmail = decodeMockToken(token) || "mock@example.com";
+    const movement = normalizeMockComputerMovement(payload, computer, actorEmail);
+    const updatedComputer = {
+      ...computer,
+      owner: movementType === "devolucao" ? "Estoque" : movement.nextOwner,
+      corporateEmail: movementType === "devolucao" ? "" : movement.nextCorporateEmail,
+      deviceStatus: movementType === "devolucao" ? "pendente" : "ativo"
+    };
+
+    writeMockComputers(computers.map((item) => item.id === computer.id ? updatedComputer : item));
+    const movements = readMockComputerMovements();
+    movements.push(movement);
+    writeMockComputerMovements(movements);
+    return movement;
   }
 };
 
@@ -1389,6 +1613,33 @@ const inventoryService = {
     return true;
   },
 
+  async listComputerMovements(token) {
+    if (AUTH_USE_MOCK) return mockInventoryService.listComputerMovements(token);
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/computer-movements`,
+      method: "GET",
+      token
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao carregar movimentacoes.");
+    }
+    return Array.isArray(result.data.movements) ? result.data.movements : [];
+  },
+
+  async createComputerMovement(token, payload) {
+    if (AUTH_USE_MOCK) return mockInventoryService.createComputerMovement(token, payload);
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/computer-movements`,
+      method: "POST",
+      token,
+      body: payload
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao registrar movimentacao.");
+    }
+    return result.data.movement;
+  },
+
   async listUsers(token) {
     const result = await apiRequest({
       url: `${API_BASE_URL}/users`,
@@ -1431,6 +1682,7 @@ async function refreshInventoryData() {
   if (!state.auth.isAuthenticated || !state.auth.token) {
     state.computers = [];
     state.corporateEmails = [];
+    state.computerMovements = [];
     state.users = [];
     state.auditLogs = [];
     return;
@@ -1439,7 +1691,8 @@ async function refreshInventoryData() {
   // Carregamento em paralelo para reduzir tempo de espera apos login e refresh.
   const promises = [
     inventoryService.listComputers(state.auth.token),
-    inventoryService.listCorporateEmails(state.auth.token)
+    inventoryService.listCorporateEmails(state.auth.token),
+    inventoryService.listComputerMovements(state.auth.token)
   ];
 
   if (isAdmin()) {
@@ -1447,10 +1700,11 @@ async function refreshInventoryData() {
   }
   promises.push(inventoryService.listAuditLogs(state.auth.token));
 
-  const [computers, corporateEmails, maybeUsersOrLogs, maybeLogs] = await Promise.all(promises);
+  const [computers, corporateEmails, computerMovements, maybeUsersOrLogs, maybeLogs] = await Promise.all(promises);
 
   state.computers = computers;
   state.corporateEmails = corporateEmails;
+  state.computerMovements = computerMovements;
   state.users = isAdmin() ? maybeUsersOrLogs : [];
   state.auditLogs = isAdmin() ? maybeLogs : maybeUsersOrLogs;
 }
@@ -1510,12 +1764,14 @@ async function logout() {
   clearAuthSession();
   state.computers = [];
   state.corporateEmails = [];
+  state.computerMovements = [];
   state.users = [];
   state.auditLogs = [];
   closeModal();
   setAuthMode("login");
   setAuthError("");
   setPermissionsFeedback("");
+  setMovementFeedback("");
   render();
 }
 
@@ -1525,6 +1781,7 @@ function bindEvents() {
       if (!state.auth.isAuthenticated) return;
       state.currentView = button.dataset.nav;
       setCorporateFeedback("");
+      setMovementFeedback("");
       setPermissionsFeedback("");
       render();
     });
@@ -1608,6 +1865,29 @@ function bindEvents() {
       render();
     } catch (error) {
       setPermissionsFeedback(error.message || "Falha ao atualizar permissao.", "error");
+    }
+  });
+
+  elements.movementComputer.addEventListener("change", () => {
+    setMovementFeedback("");
+    syncMovementForm();
+  });
+
+  elements.movementType.addEventListener("change", () => {
+    setMovementFeedback("");
+    syncMovementForm();
+  });
+
+  elements.movementForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!state.auth.isAuthenticated) return;
+    try {
+      await createComputerMovement(new FormData(elements.movementForm));
+      elements.movementForm.reset();
+      setMovementFeedback("Movimentacao registrada com sucesso.", "ok");
+      render();
+    } catch (error) {
+      setMovementFeedback(error.message || "Falha ao registrar movimentacao.", "error");
     }
   });
 
