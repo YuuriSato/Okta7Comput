@@ -6,6 +6,7 @@
     <title>Gestão de Computadores</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="./tailwind-config.js"></script>
+    <script>window.APP_CONFIG = { AUTH_USE_MOCK: true };</script>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body class="min-h-screen bg-slate-100 text-slate-900">
@@ -341,10 +342,12 @@
 
     <script>
       const hasHttpOrigin = window.location.origin && window.location.origin !== "null";
+      const existingConfig = window.APP_CONFIG || {};
       window.APP_CONFIG = {
-        API_BASE_URL: hasHttpOrigin ? `${window.location.origin}/api` : "http://localhost:3000/api",
+        ...existingConfig,
+        API_BASE_URL: existingConfig.API_BASE_URL || (hasHttpOrigin ? `${window.location.origin}/api` : "http://localhost:3000/api"),
         // Fallback mock somente para ambiente sem backend.
-        AUTH_USE_MOCK: false
+        AUTH_USE_MOCK: typeof existingConfig.AUTH_USE_MOCK === "boolean" ? existingConfig.AUTH_USE_MOCK : false
       };
     </script>
     <script src="./app.js" defer></script>

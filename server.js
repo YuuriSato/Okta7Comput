@@ -166,6 +166,7 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
+app.options("/api/auth/register", cors());
 app.post("/api/auth/register", async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || "");
@@ -257,6 +258,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 });
 
+app.options("/api/auth/login", cors());
 app.post("/api/auth/login", async (req, res) => {
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || "");

@@ -87,6 +87,13 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (
   SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'warranty_days'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN warranty_days INT UNSIGNED NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'cpu'
 );
 SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN cpu VARCHAR(255) NULL', 'SELECT 1');
@@ -132,6 +139,13 @@ SET @exists := (
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'notes'
 );
 SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN notes TEXT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'specs'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN specs TEXT NULL', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (
