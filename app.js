@@ -2,6 +2,8 @@
 const AUTH_TOKEN_KEY = "auth_token";
 const AUTH_USER_KEY = "auth_user";
 const MOCK_USERS_KEY = "mock_auth_users_v1";
+const MOCK_COMPUTERS_KEY = "mock_inventory_computers_v1";
+const MOCK_CORPORATE_EMAILS_KEY = "mock_inventory_corporate_emails_v1";
 const appConfig = window.APP_CONFIG || {};
 const defaultApiBase = window.location.origin && window.location.origin !== "null"
   ? `${window.location.origin}/api`
@@ -722,6 +724,96 @@ function writeMockUsers(users) {
   localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(users));
 }
 
+function readMockComputers() {
+  try {
+    const computers = JSON.parse(localStorage.getItem(MOCK_COMPUTERS_KEY) || "[]");
+    return Array.isArray(computers) ? computers : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeMockComputers(computers) {
+  localStorage.setItem(MOCK_COMPUTERS_KEY, JSON.stringify(computers));
+}
+
+function readMockCorporateEmails() {
+  try {
+    const emails = JSON.parse(localStorage.getItem(MOCK_CORPORATE_EMAILS_KEY) || "[]");
+    return Array.isArray(emails) ? emails : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeMockCorporateEmails(emails) {
+  localStorage.setItem(MOCK_CORPORATE_EMAILS_KEY, JSON.stringify(emails));
+}
+
+function buildMockId(prefix) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function sortByCreatedAtDesc(items) {
+  return [...items].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+}
+
+function normalizeMockComputer(payload, existingComputer = null) {
+  const createdAt = existingComputer?.createdAt || new Date().toISOString();
+  const warrantyMonths = Number(payload.warrantyMonths || 0);
+  const warrantyDays = Number(payload.warrantyDays || (warrantyMonths > 0 ? warrantyMonths * 30 : 0));
+  const computer = {
+    id: existingComputer?.id || buildMockId("pc"),
+    owner: String(payload.owner || "").trim(),
+    serial: String(payload.serial || "").trim(),
+    machine: String(payload.machine || "").trim(),
+    deviceStatus: String(payload.deviceStatus || "ativo").trim().toLowerCase(),
+    corporateEmail: String(payload.corporateEmail || "").trim().toLowerCase(),
+    purchaseDate: String(payload.purchaseDate || "").trim(),
+    warrantyMonths,
+    warrantyDays,
+    cpu: String(payload.cpu || "").trim(),
+    ram: String(payload.ram || "").trim(),
+    gpu: String(payload.gpu || "").trim(),
+    storage: String(payload.storage || "").trim(),
+    storageType: String(payload.storageType || "SSD").trim(),
+    os: String(payload.os || "").trim(),
+    notes: String(payload.notes || "").trim(),
+    specs: String(payload.specs || "").trim(),
+    createdAt
+  };
+
+  if (!["ativo", "inativo", "pendente"].includes(computer.deviceStatus)) {
+    computer.deviceStatus = "ativo";
+  }
+
+  if (!computer.specs) {
+    computer.specs = buildSpecs(computer);
+  }
+
+  return computer;
+}
+
+function normalizeMockCorporateEmail(email, existingEmail = null) {
+  return {
+    id: existingEmail?.id || buildMockId("mail"),
+    email: String(email || "").trim().toLowerCase(),
+    active: true,
+    createdAt: existingEmail?.createdAt || new Date().toISOString()
+  };
+}
+
+function buildMockCorporateEmailsWithCounts() {
+  const emails = readMockCorporateEmails();
+  const computers = readMockComputers();
+  return sortByCreatedAtDesc(
+    emails.map((item) => ({
+      ...item,
+      machineCount: computers.filter((computer) => computer.corporateEmail === item.email).length
+    }))
+  );
+}
+
 function buildMockToken(email) {
   const safeEmail = btoa(unescape(encodeURIComponent(email)));
   return `mock.${safeEmail}.${Date.now()}`;
@@ -772,6 +864,104 @@ const mockAuthService = {
   }
 };
 
+const mockInventoryService = {
+  async listComputers() {
+    return sortByCreatedAtDesc(readMockComputers());
+  },
+
+  async createComputer(_token, payload) {
+    const computers = readMockComputers();
+    const corporateEmails = readMockCorporateEmails();
+    const serial = String(payload.serial || "").trim().toLowerCase();
+
+    if (computers.some((computer) => String(computer.serial || "").trim().toLowerCase() === serial)) {
+      throw new Error("Numero de serie ja cadastrado.");
+    }
+
+    if (payload.corporateEmail && !corporateEmails.some((item) => item.email === payload.corporateEmail)) {
+      throw new Error("Email corporativo nao autorizado.");
+    }
+
+    const computer = normalizeMockComputer(payload);
+    computers.push(computer);
+    writeMockComputers(computers);
+    return computer;
+  },
+
+  async updateComputer(_token, id, payload) {
+    const computers = readMockComputers();
+    const corporateEmails = readMockCorporateEmails();
+    const index = computers.findIndex((computer) => computer.id === id);
+
+    if (index < 0) {
+      throw new Error("Computador nao encontrado.");
+    }
+
+    const serial = String(payload.serial || "").trim().toLowerCase();
+    if (computers.some((computer, currentIndex) => currentIndex !== index && String(computer.serial || "").trim().toLowerCase() === serial)) {
+      throw new Error("Numero de serie ja cadastrado.");
+    }
+
+    if (payload.corporateEmail && !corporateEmails.some((item) => item.email === payload.corporateEmail)) {
+      throw new Error("Email corporativo nao autorizado.");
+    }
+
+    const updated = normalizeMockComputer(payload, computers[index]);
+    computers[index] = updated;
+    writeMockComputers(computers);
+    return updated;
+  },
+
+  async deleteComputer(_token, id) {
+    const computers = readMockComputers();
+    const filtered = computers.filter((computer) => computer.id !== id);
+
+    if (filtered.length === computers.length) {
+      throw new Error("Computador nao encontrado.");
+    }
+
+    writeMockComputers(filtered);
+    return true;
+  },
+
+  async listCorporateEmails() {
+    return buildMockCorporateEmailsWithCounts();
+  },
+
+  async createCorporateEmail(_token, email) {
+    const emails = readMockCorporateEmails();
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+
+    if (emails.some((item) => item.email === normalizedEmail)) {
+      throw new Error("Este email ja foi cadastrado.");
+    }
+
+    const created = normalizeMockCorporateEmail(normalizedEmail);
+    emails.push(created);
+    writeMockCorporateEmails(emails);
+    return { ...created, machineCount: 0 };
+  },
+
+  async removeCorporateEmail(_token, id) {
+    const emails = readMockCorporateEmails();
+    const emailToRemove = emails.find((item) => item.id === id);
+
+    if (!emailToRemove) {
+      throw new Error("Email nao encontrado.");
+    }
+
+    writeMockCorporateEmails(emails.filter((item) => item.id !== id));
+
+    const computers = readMockComputers().map((computer) =>
+      computer.corporateEmail === emailToRemove.email
+        ? { ...computer, corporateEmail: "" }
+        : computer
+    );
+    writeMockComputers(computers);
+    return true;
+  }
+};
+
 async function apiRequest({ url, method = "GET", body, token }) {
   try {
     const response = await fetch(url, {
@@ -818,6 +1008,7 @@ function canUseMockFallback(result) {
 
 const authService = {
   async login(payload) {
+    if (AUTH_USE_MOCK) return mockAuthService.login(payload);
     const apiResult = await apiRequest({
       url: `${AUTH_BASE_URL}/login`,
       method: "POST",
@@ -828,6 +1019,7 @@ const authService = {
     throw new Error(apiResult.message || "Falha ao autenticar.");
   },
   async register(payload) {
+    if (AUTH_USE_MOCK) return mockAuthService.register(payload);
     const apiResult = await apiRequest({
       url: `${AUTH_BASE_URL}/register`,
       method: "POST",
@@ -838,6 +1030,7 @@ const authService = {
     throw new Error(apiResult.message || "Falha ao cadastrar.");
   },
   async me(token) {
+    if (AUTH_USE_MOCK) return mockAuthService.me(token);
     const apiResult = await apiRequest({
       url: `${AUTH_BASE_URL}/me`,
       method: "GET",
@@ -848,6 +1041,10 @@ const authService = {
     throw new Error(apiResult.message || "Sessao invalida.");
   },
   async logout() {
+    if (AUTH_USE_MOCK) {
+      await mockAuthService.logout();
+      return;
+    }
     await mockAuthService.logout();
   }
 };
@@ -871,6 +1068,7 @@ function normalizeMePayload(data) {
 
 const inventoryService = {
   async listComputers(token) {
+    if (AUTH_USE_MOCK) return mockInventoryService.listComputers(token);
     const result = await apiRequest({
       url: `${API_BASE_URL}/computers`,
       method: "GET",
@@ -883,6 +1081,7 @@ const inventoryService = {
   },
 
   async createComputer(token, payload) {
+    if (AUTH_USE_MOCK) return mockInventoryService.createComputer(token, payload);
     const result = await apiRequest({
       url: `${API_BASE_URL}/computers`,
       method: "POST",
@@ -896,6 +1095,7 @@ const inventoryService = {
   },
 
   async updateComputer(token, id, payload) {
+    if (AUTH_USE_MOCK) return mockInventoryService.updateComputer(token, id, payload);
     const result = await apiRequest({
       url: `${API_BASE_URL}/computers/${encodeURIComponent(id)}`,
       method: "PUT",
@@ -909,6 +1109,7 @@ const inventoryService = {
   },
 
   async deleteComputer(token, id) {
+    if (AUTH_USE_MOCK) return mockInventoryService.deleteComputer(token, id);
     const result = await apiRequest({
       url: `${API_BASE_URL}/computers/${encodeURIComponent(id)}`,
       method: "DELETE",
@@ -921,6 +1122,7 @@ const inventoryService = {
   },
 
   async listCorporateEmails(token) {
+    if (AUTH_USE_MOCK) return mockInventoryService.listCorporateEmails(token);
     const result = await apiRequest({
       url: `${API_BASE_URL}/corporate-emails`,
       method: "GET",
@@ -933,6 +1135,7 @@ const inventoryService = {
   },
 
   async createCorporateEmail(token, email) {
+    if (AUTH_USE_MOCK) return mockInventoryService.createCorporateEmail(token, email);
     const result = await apiRequest({
       url: `${API_BASE_URL}/corporate-emails`,
       method: "POST",
@@ -946,6 +1149,7 @@ const inventoryService = {
   },
 
   async removeCorporateEmail(token, id) {
+    if (AUTH_USE_MOCK) return mockInventoryService.removeCorporateEmail(token, id);
     const result = await apiRequest({
       url: `${API_BASE_URL}/corporate-emails/${encodeURIComponent(id)}`,
       method: "DELETE",
