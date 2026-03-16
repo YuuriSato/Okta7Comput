@@ -206,8 +206,8 @@
             <p class="mt-1 text-lg text-slate-600">Registre devoluções para estoque e trocas de responsável diretamente pelo sistema</p>
           </header>
 
-          <section class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,420px)_1fr]">
-            <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
+          <section class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md xl:col-span-1">
               <div class="flex items-center justify-between gap-4">
                 <div>
                   <h2 class="text-2xl font-bold">Nova movimentação</h2>
@@ -221,7 +221,7 @@
                   <select id="movement-computer" name="computerId" required class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"></select>
                 </label>
 
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div class="grid grid-cols-1 gap-4">
                   <label class="block text-sm font-medium text-slate-700">
                     Tipo de movimentação
                     <select id="movement-type" name="movementType" class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
@@ -235,7 +235,7 @@
                   </div>
                 </div>
 
-                <div id="movement-target-fields" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div id="movement-target-fields" class="grid grid-cols-1 gap-4">
                   <label class="block text-sm font-medium text-slate-700">
                     Novo responsável
                     <input id="movement-next-owner" name="nextOwner" type="text" placeholder="Nome do novo responsável" class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
@@ -257,7 +257,7 @@
               </form>
             </article>
 
-            <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
+            <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md xl:col-span-2">
               <div class="flex items-center justify-between gap-4">
                 <div>
                   <h2 class="text-2xl font-bold">Movimentações recentes</h2>
