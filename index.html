@@ -6,6 +6,7 @@
     <title>Gestão de Computadores</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="./tailwind-config.js"></script>
     <script>window.APP_CONFIG = { AUTH_USE_MOCK: false };</script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231d4ed8'/%3E%3Ctext x='50%25' y='54%25' font-size='24' text-anchor='middle' fill='white' font-family='Arial'%3EO7%3C/text%3E%3C/svg%3E" />
@@ -116,7 +117,7 @@
             </div>
             <div class="flex flex-wrap gap-3">
               <button id="export-pdf" class="rounded-xl border border-fuchsia-300 bg-fuchsia-50 px-4 py-2.5 text-sm font-semibold text-fuchsia-700 hover:bg-fuchsia-100">Exportar PDF</button>
-              <button id="export-csv" class="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Exportar</button>
+              <button id="export-csv" class="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Exportar Excel</button>
               <button id="new-from-table" class="rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-soft hover:bg-brand-600">+ Novo Computador</button>
             </div>
           </header>
@@ -166,7 +167,7 @@
                 </div>
               </div>
               <div class="flex flex-col gap-3 lg:min-w-[260px]">
-                <button id="download-csv-template" class="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Baixar Modelo CSV</button>
+                <button id="download-csv-template" class="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Baixar Modelo Excel</button>
                 <label for="import-csv-input" class="cursor-pointer rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-center text-sm font-semibold text-blue-700 hover:bg-blue-100">Selecionar Arquivo CSV</label>
                 <input id="import-csv-input" type="file" accept=".csv,text/csv" class="hidden" />
               </div>

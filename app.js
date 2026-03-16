@@ -822,20 +822,20 @@ async function deleteComputer(id) {
 }
 
 const CSV_COLUMNS = [
-  { key: "owner", header: "dono", required: true, aliases: ["owner"], example: "Maria Silva" },
-  { key: "corporateEmail", header: "email_corporativo", aliases: ["emailcorporativo", "corporateemail"], example: "maria@okta7.com.br" },
-  { key: "serial", header: "numero_serie", required: true, aliases: ["serial", "numerodeserie"], example: "SN-001" },
-  { key: "machine", header: "modelo", aliases: ["maquina", "machine", "maquinamodelo"], example: "Dell Latitude 5440" },
-  { key: "deviceStatus", header: "status", aliases: ["devicestatus"], example: "ativo" },
-  { key: "purchaseDate", header: "data_compra", aliases: ["datacompra", "datadecompra", "purchasedate"], example: "2026-03-16" },
-  { key: "warrantyMonths", header: "garantia_meses", aliases: ["garantiameses", "warrantymonths"], example: "12" },
-  { key: "storage", header: "armazenamento", aliases: ["storage"], example: "512 GB" },
-  { key: "storageType", header: "tipo_armazenamento", aliases: ["storagetype", "tipodearmazenamento"], example: "SSD" },
-  { key: "os", header: "sistema_operacional", aliases: ["sistemaoperacional", "operatingsystem", "os"], example: "Windows 11 Pro" },
-  { key: "notes", header: "observacoes", aliases: ["notes"], example: "Notebook do comercial" },
-  { key: "warrantyDays", header: "garantia_dias", aliases: ["garantiadias", "warrantydays"], example: "360" },
-  { key: "specs", header: "specs", aliases: ["resumospecs"], example: "Intel Core i7 / 16 GB / 512 GB SSD / Windows 11 Pro" },
-  { key: "createdAt", header: "cadastro", aliases: ["createdat"], example: "2026-03-16 09:00:00" }
+  { key: "owner", header: "dono", required: true, aliases: ["owner"], example: "Maria Silva", width: 24 },
+  { key: "corporateEmail", header: "email_corporativo", aliases: ["emailcorporativo", "corporateemail"], example: "maria@okta7.com.br", width: 28 },
+  { key: "serial", header: "numero_serie", required: true, aliases: ["serial", "numerodeserie"], example: "SN-001", width: 20 },
+  { key: "machine", header: "modelo", aliases: ["maquina", "machine", "maquinamodelo"], example: "Dell Latitude 5440", width: 26 },
+  { key: "deviceStatus", header: "status", aliases: ["devicestatus"], example: "ativo", width: 14 },
+  { key: "purchaseDate", header: "data_compra", aliases: ["datacompra", "datadecompra", "purchasedate"], example: "2026-03-16", width: 16 },
+  { key: "warrantyMonths", header: "garantia_meses", aliases: ["garantiameses", "warrantymonths"], example: "12", width: 16 },
+  { key: "storage", header: "armazenamento", aliases: ["storage"], example: "512 GB", width: 18 },
+  { key: "storageType", header: "tipo_armazenamento", aliases: ["storagetype", "tipodearmazenamento"], example: "SSD", width: 18 },
+  { key: "os", header: "sistema_operacional", aliases: ["sistemaoperacional", "operatingsystem", "os"], example: "Windows 11 Pro", width: 22 },
+  { key: "notes", header: "observacoes", aliases: ["notes"], example: "Notebook do comercial", width: 28 },
+  { key: "warrantyDays", header: "garantia_dias", aliases: ["garantiadias", "warrantydays"], example: "360", width: 16 },
+  { key: "specs", header: "specs", aliases: ["resumospecs"], example: "Intel Core i7 / 16 GB / 512 GB SSD / Windows 11 Pro", width: 42 },
+  { key: "createdAt", header: "cadastro", aliases: ["createdat"], example: "2026-03-16 09:00:00", width: 22 }
 ];
 
 const LEGACY_CSV_HEADER_MAP = {
@@ -877,13 +877,65 @@ function downloadCsv(content, filename) {
   URL.revokeObjectURL(link.href);
 }
 
+function downloadExcelWorkbook({ filename, title, subtitle, rows }) {
+  if (!window.XLSX?.utils) {
+    return false;
+  }
+
+  const headers = CSV_COLUMNS.map((column) => column.header);
+  const sheetRows = [
+    [title],
+    [subtitle],
+    [],
+    headers,
+    ...rows
+  ];
+
+  const worksheet = window.XLSX.utils.aoa_to_sheet(sheetRows);
+  const lastColumnIndex = CSV_COLUMNS.length - 1;
+  const headerRowIndex = 3;
+  const firstDataRowIndex = 4;
+  const lastColumnRef = window.XLSX.utils.encode_col(lastColumnIndex);
+
+  worksheet["!cols"] = CSV_COLUMNS.map((column) => ({ wch: column.width || 16 }));
+  worksheet["!rows"] = [
+    { hpt: 24 },
+    { hpt: 34 },
+    { hpt: 8 },
+    { hpt: 22 }
+  ];
+  worksheet["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: lastColumnIndex } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: lastColumnIndex } }
+  ];
+  worksheet["!autofilter"] = {
+    ref: `A${headerRowIndex + 1}:${lastColumnRef}${headerRowIndex + 1}`
+  };
+  worksheet["!freeze"] = { xSplit: 0, ySplit: firstDataRowIndex, topLeftCell: `A${firstDataRowIndex + 1}`, activePane: "bottomLeft", state: "frozen" };
+
+  const workbook = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(workbook, worksheet, "Computadores");
+  window.XLSX.writeFile(workbook, filename);
+  return true;
+}
+
 function downloadCsvTemplate() {
   const delimiter = ";";
   const toCsvCell = (value) => `"${String(value ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
   const headerLine = CSV_COLUMNS.map((column) => toCsvCell(column.header)).join(delimiter);
   const exampleLine = CSV_COLUMNS.map((column) => toCsvCell(column.example || "")).join(delimiter);
-  downloadCsv(["sep=;", headerLine, exampleLine].join("\r\n"), "modelo-importacao-computadores.csv");
-  setImportFeedback("Modelo CSV baixado com sucesso. Abra no Excel e preencha as colunas.", "ok");
+  const usedExcel = downloadExcelWorkbook({
+    filename: "modelo-importacao-computadores.xlsx",
+    title: "Modelo de importacao de computadores",
+    subtitle: "Preencha a partir da linha 5. Obrigatorios: dono e numero_serie. Use specs para concentrar hardware.",
+    rows: [CSV_COLUMNS.map((column) => column.example || "")]
+  });
+
+  if (!usedExcel) {
+    downloadCsv(["sep=;", headerLine, exampleLine].join("\r\n"), "modelo-importacao-computadores.csv");
+  }
+
+  setImportFeedback("Modelo de importacao baixado com sucesso para abrir no Excel.", "ok");
 }
 
 function exportCsv() {
@@ -898,8 +950,17 @@ function exportCsv() {
       })
       .join(delimiter)
   );
+  const excelRows = state.computers.map((computer) => CSV_COLUMNS.map((column) => csvValueForExport(column, computer) ?? ""));
+  const usedExcel = downloadExcelWorkbook({
+    filename: "inventario-computadores.xlsx",
+    title: "Exportacao de computadores",
+    subtitle: "Planilha gerada pelo sistema. A linha 4 contem os headers para reimportacao.",
+    rows: excelRows
+  });
 
-  downloadCsv(["sep=;", headerLine, ...rows].join("\r\n"), "inventario-computadores.csv");
+  if (!usedExcel) {
+    downloadCsv(["sep=;", headerLine, ...rows].join("\r\n"), "inventario-computadores.csv");
+  }
 }
 
 function importCsv(file) {
