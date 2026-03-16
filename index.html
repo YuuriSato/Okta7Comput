@@ -137,6 +137,7 @@
                 <p class="mt-1 text-slate-600">Importe planilhas salvas como CSV usando headers claros. Os campos obrigatórios são <span class="font-semibold text-slate-900">dono</span> e <span class="font-semibold text-slate-900">numero_serie</span>.</p>
                 <div class="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
                   <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">dono</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">empresa_atual</span>
                   <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">email_corporativo</span>
                   <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">numero_serie</span>
                   <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">modelo</span>
@@ -156,6 +157,7 @@
                     <thead class="bg-slate-900 text-left font-semibold text-white">
                       <tr>
                         <th class="px-3 py-2">dono</th>
+                        <th class="px-3 py-2">empresa_atual</th>
                         <th class="px-3 py-2">email_corporativo</th>
                         <th class="px-3 py-2">numero_serie</th>
                         <th class="px-3 py-2">modelo</th>
@@ -187,7 +189,7 @@
             <h2 class="text-2xl font-bold">Filtros</h2>
             <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-[1fr_220px]">
               <label class="space-y-2 text-sm font-medium text-slate-700">
-                <span>Buscar por série, dono, email, CPU ou RAM</span>
+                <span>Buscar por série, dono, empresa, email ou specs</span>
                 <input id="filter-search" type="search" placeholder="Digite para buscar..." class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
               </label>
               <label class="space-y-2 text-sm font-medium text-slate-700">
@@ -211,7 +213,7 @@
                 <thead class="border-b border-slate-200 text-left text-sm font-semibold text-slate-600">
                   <tr>
                     <th class="px-4 py-3">Série</th>
-                    <th class="px-4 py-3">Dono</th>
+                    <th class="px-4 py-3">Dono / Empresa</th>
                     <th class="px-4 py-3">Email Corporativo</th>
                     <th class="px-4 py-3">Máquina</th>
                     <th class="px-4 py-3">Status</th>
@@ -291,6 +293,7 @@
                   </label>
                   <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
                     <p><span class="font-semibold text-slate-800">Responsável atual:</span> <span id="movement-current-owner">-</span></p>
+                    <p class="mt-1"><span class="font-semibold text-slate-800">Empresa atual:</span> <span id="movement-current-company">-</span></p>
                     <p class="mt-1"><span class="font-semibold text-slate-800">Email atual:</span> <span id="movement-current-email">-</span></p>
                   </div>
                 </div>
@@ -299,6 +302,10 @@
                   <label class="block text-sm font-medium text-slate-700">
                     Novo responsável
                     <input id="movement-next-owner" name="nextOwner" type="text" placeholder="Nome do novo responsável" class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+                  </label>
+                  <label class="block text-sm font-medium text-slate-700">
+                    Nova empresa atual
+                    <input id="movement-next-company" name="nextCompany" type="text" placeholder="Empresa/cliente atual do colaborador" class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
                   </label>
                   <label class="block text-sm font-medium text-slate-700">
                     Novo email corporativo
@@ -485,6 +492,12 @@
                 <span class="font-semibold text-slate-700">Dono *</span>
                 <input name="owner" required placeholder="Ex: João Silva" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
               </label>
+              <label class="space-y-1 text-sm">
+                <span class="font-semibold text-slate-700">Empresa Atual</span>
+                <input name="company" placeholder="Ex: Cliente XPTO" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+              </label>
+            </div>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
               <label class="space-y-1 text-sm">
                 <span class="font-semibold text-slate-700">Máquina/Modelo *</span>
                 <input name="machine" required placeholder="Ex: Dell XPS 15" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />

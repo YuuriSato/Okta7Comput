@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE TABLE IF NOT EXISTS computers (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   owner_name VARCHAR(120) NOT NULL,
+  company_name VARCHAR(160) NULL,
   serial_number VARCHAR(120) NOT NULL,
   machine_model VARCHAR(120) NULL,
   device_status ENUM('ativo','inativo','pendente') NOT NULL DEFAULT 'ativo',
@@ -78,9 +79,11 @@ CREATE TABLE IF NOT EXISTS computer_movements (
   computer_id BIGINT UNSIGNED NOT NULL,
   movement_type ENUM('devolucao','troca') NOT NULL,
   previous_owner VARCHAR(120) NULL,
+  previous_company_name VARCHAR(160) NULL,
   previous_corporate_email VARCHAR(255) NULL,
   previous_device_status ENUM('ativo','inativo','pendente') NOT NULL DEFAULT 'ativo',
   next_owner VARCHAR(120) NULL,
+  next_company_name VARCHAR(160) NULL,
   next_corporate_email VARCHAR(255) NULL,
   next_device_status ENUM('ativo','inativo','pendente') NOT NULL DEFAULT 'ativo',
   reason TEXT NULL,
@@ -130,6 +133,13 @@ SET @exists := (
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'owner_name'
 );
 SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN owner_name VARCHAR(120) NOT NULL DEFAULT ''''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'company_name'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN company_name VARCHAR(160) NULL AFTER owner_name', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (
@@ -233,9 +243,11 @@ SET @sql := IF(@exists = 0,
     computer_id BIGINT UNSIGNED NOT NULL,
     movement_type ENUM(''devolucao'',''troca'') NOT NULL,
     previous_owner VARCHAR(120) NULL,
+    previous_company_name VARCHAR(160) NULL,
     previous_corporate_email VARCHAR(255) NULL,
     previous_device_status ENUM(''ativo'',''inativo'',''pendente'') NOT NULL DEFAULT ''ativo'',
     next_owner VARCHAR(120) NULL,
+    next_company_name VARCHAR(160) NULL,
     next_corporate_email VARCHAR(255) NULL,
     next_device_status ENUM(''ativo'',''inativo'',''pendente'') NOT NULL DEFAULT ''ativo'',
     reason TEXT NULL,
@@ -260,9 +272,23 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (
   SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computer_movements' AND COLUMN_NAME = 'previous_company_name'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE computer_movements ADD COLUMN previous_company_name VARCHAR(160) NULL AFTER previous_owner', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computer_movements' AND COLUMN_NAME = 'next_device_status'
 );
 SET @sql := IF(@exists = 0, 'ALTER TABLE computer_movements ADD COLUMN next_device_status ENUM(''ativo'',''inativo'',''pendente'') NOT NULL DEFAULT ''ativo'' AFTER next_corporate_email', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computer_movements' AND COLUMN_NAME = 'next_company_name'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE computer_movements ADD COLUMN next_company_name VARCHAR(160) NULL AFTER next_owner', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- Seed opcional:

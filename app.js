@@ -62,9 +62,11 @@ const elements = {
   movementComputer: document.getElementById("movement-computer"),
   movementType: document.getElementById("movement-type"),
   movementCurrentOwner: document.getElementById("movement-current-owner"),
+  movementCurrentCompany: document.getElementById("movement-current-company"),
   movementCurrentEmail: document.getElementById("movement-current-email"),
   movementTargetFields: document.getElementById("movement-target-fields"),
   movementNextOwner: document.getElementById("movement-next-owner"),
+  movementNextCompany: document.getElementById("movement-next-company"),
   movementNextEmail: document.getElementById("movement-next-email"),
   movementReason: document.getElementById("movement-reason"),
   movementFeedback: document.getElementById("movement-feedback"),
@@ -333,7 +335,7 @@ function renderMovementComputerOptions(selectedId = "") {
   state.computers.forEach((computer) => {
     const selected = computer.id === selectedId ? "selected" : "";
     options.push(
-      `<option value="${escapeHtml(computer.id)}" ${selected}>${escapeHtml(computer.serial)} - ${escapeHtml(computer.owner || "Sem responsável")}</option>`
+      `<option value="${escapeHtml(computer.id)}" ${selected}>${escapeHtml(computer.serial)} - ${escapeHtml(computer.owner || "Sem responsável")}${computer.company ? ` (${escapeHtml(computer.company)})` : ""}</option>`
     );
   });
   elements.movementComputer.innerHTML = options.join("");
@@ -361,14 +363,17 @@ function syncMovementForm() {
   const isExchange = movementType === "troca";
 
   elements.movementCurrentOwner.textContent = selectedComputer?.owner || "-";
+  elements.movementCurrentCompany.textContent = selectedComputer?.company || "-";
   elements.movementCurrentEmail.textContent = selectedComputer?.corporateEmail || "-";
   elements.movementTargetFields.classList.toggle("opacity-70", !isExchange);
   elements.movementNextOwner.disabled = !isExchange;
+  elements.movementNextCompany.disabled = !isExchange;
   elements.movementNextEmail.disabled = !isExchange;
   elements.movementNextOwner.required = isExchange;
 
   if (!isExchange) {
     elements.movementNextOwner.value = "";
+    elements.movementNextCompany.value = "";
     elements.movementNextEmail.value = "";
   }
 }
@@ -419,7 +424,7 @@ function deviceStatusBadge(status) {
 function filteredComputers() {
   return state.computers.filter((computer) => {
     const status = getWarrantyStatus(computer);
-    const joined = `${computer.serial} ${computer.owner} ${computer.corporateEmail || ""} ${computer.specs} ${computer.machine}`.toLowerCase();
+    const joined = `${computer.serial} ${computer.owner} ${computer.company || ""} ${computer.corporateEmail || ""} ${computer.specs} ${computer.machine}`.toLowerCase();
     const matchesSearch = joined.includes(state.searchTerm.toLowerCase());
     const matchesStatus = state.statusFilter === "todos" ? true : status === state.statusFilter;
     return matchesSearch && matchesStatus;
@@ -554,7 +559,12 @@ function renderTable() {
       return `
         <tr class="hover:bg-slate-50/80">
           <td class="px-4 py-4 font-semibold">${escapeHtml(computer.serial)}</td>
-          <td class="px-4 py-4">${escapeHtml(computer.owner)}</td>
+          <td class="px-4 py-4">
+            <div class="space-y-1">
+              <p>${escapeHtml(computer.owner)}</p>
+              <p class="text-xs text-slate-500">${escapeHtml(computer.company || "-")}</p>
+            </div>
+          </td>
           <td class="px-4 py-4">${escapeHtml(computer.corporateEmail || "-")}</td>
           <td class="px-4 py-4">${escapeHtml(computer.machine || "-")}</td>
           <td class="px-4 py-4">${deviceStatusBadge(computer.deviceStatus || "ativo")}</td>
@@ -652,12 +662,14 @@ function renderMovements() {
       <td class="px-4 py-4">
         <div class="space-y-1">
           <p>${escapeHtml(movement.previousOwner || "-")}</p>
+          <p class="text-xs text-slate-500">${escapeHtml(movement.previousCompany || "-")}</p>
           <p class="text-xs text-slate-500">${escapeHtml(movement.previousCorporateEmail || "-")}</p>
         </div>
       </td>
       <td class="px-4 py-4">
         <div class="space-y-1">
           <p>${escapeHtml(movement.nextOwner || (movement.movementType === "devolucao" ? "Estoque" : "-"))}</p>
+          <p class="text-xs text-slate-500">${escapeHtml(movement.nextCompany || "-")}</p>
           <p class="text-xs text-slate-500">${escapeHtml(movement.nextCorporateEmail || "-")}</p>
         </div>
       </td>
@@ -768,6 +780,7 @@ function openModal(computer = null) {
   renderCorporateEmailOptions(computer?.corporateEmail || "");
   elements.modalTitle.textContent = computer ? "Editar Computador" : "Adicionar Novo Computador";
   elements.form.owner.value = computer?.owner || "";
+  elements.form.company.value = computer?.company || "";
   elements.form.serial.value = computer?.serial || "";
   elements.form.machine.value = computer?.machine || "";
   elements.form.purchaseDate.value = computer?.purchaseDate || "";
@@ -795,6 +808,7 @@ function closeModal() {
 async function upsertComputer(formData) {
   const payload = {
     owner: formData.get("owner").trim(),
+    company: String(formData.get("company") || "").trim(),
     serial: formData.get("serial").trim(),
     machine: formData.get("machine").trim(),
     purchaseDate: String(formData.get("purchaseDate") || ""),
@@ -862,6 +876,7 @@ async function createComputerMovement(formData) {
     computerId: String(formData.get("computerId") || "").trim(),
     movementType,
     nextOwner: String(formData.get("nextOwner") || "").trim(),
+    nextCompany: String(formData.get("nextCompany") || "").trim(),
     nextCorporateEmail: String(formData.get("nextCorporateEmail") || "").trim().toLowerCase(),
     reason: String(formData.get("reason") || "").trim()
   };
@@ -877,6 +892,7 @@ async function createComputerMovement(formData) {
   }
   if (movementType === "devolucao") {
     payload.nextOwner = "";
+    payload.nextCompany = "";
     payload.nextCorporateEmail = "";
   }
 
@@ -915,7 +931,7 @@ function viewComputer(id) {
   if (!computer) return;
   const remaining = getRemainingDays(computer);
   window.alert(
-    `Dono: ${computer.owner}\nEmail corporativo: ${computer.corporateEmail || "-"}\nSerie: ${computer.serial}\nMaquina: ${computer.machine || "-"}\nStatus: ${statusLabel(computer.deviceStatus)}\nData de compra: ${computer.purchaseDate || "-"}\nGarantia: ${computer.warrantyMonths ?? "-"} meses\nRestante: ${formatRemaining(remaining)}\nCPU: ${computer.cpu || "-"}\nRAM: ${computer.ram || "-"}\nGPU: ${computer.gpu || "-"}\nArmazenamento: ${computer.storage || "-"} ${computer.storageType || ""}\nSO: ${computer.os || "-"}\nObservacoes: ${computer.notes || "-"}`
+    `Dono: ${computer.owner}\nEmpresa atual: ${computer.company || "-"}\nEmail corporativo: ${computer.corporateEmail || "-"}\nSerie: ${computer.serial}\nMaquina: ${computer.machine || "-"}\nStatus: ${statusLabel(computer.deviceStatus)}\nData de compra: ${computer.purchaseDate || "-"}\nGarantia: ${computer.warrantyMonths ?? "-"} meses\nRestante: ${formatRemaining(remaining)}\nCPU: ${computer.cpu || "-"}\nRAM: ${computer.ram || "-"}\nGPU: ${computer.gpu || "-"}\nArmazenamento: ${computer.storage || "-"} ${computer.storageType || ""}\nSO: ${computer.os || "-"}\nObservacoes: ${computer.notes || "-"}`
   );
 }
 
@@ -934,6 +950,7 @@ async function deleteComputer(id) {
 
 const CSV_COLUMNS = [
   { key: "owner", header: "dono", required: true, aliases: ["owner"], example: "Maria Silva", width: 24 },
+  { key: "company", header: "empresa_atual", aliases: ["empresa", "company", "empresaatual"], example: "Cliente XPTO", width: 22 },
   { key: "corporateEmail", header: "email_corporativo", aliases: ["emailcorporativo", "corporateemail"], example: "maria@okta7.com.br", width: 28 },
   { key: "serial", header: "numero_serie", required: true, aliases: ["serial", "numerodeserie"], example: "SN-001", width: 20 },
   { key: "machine", header: "modelo", aliases: ["maquina", "machine", "maquinamodelo"], example: "Dell Latitude 5440", width: 26 },
@@ -1103,6 +1120,7 @@ function importCsv(file) {
         const row = Object.fromEntries(headers.map((key, idx) => [key, values[idx] || ""]));
         const normalized = {
           owner: row.owner.trim(),
+          company: row.company?.trim() || "",
           corporateEmail: row.corporateEmail?.trim().toLowerCase() || "",
           serial: row.serial.trim(),
           machine: row.machine?.trim() || "",
@@ -1257,6 +1275,7 @@ function normalizeMockComputer(payload, existingComputer = null) {
   const computer = {
     id: existingComputer?.id || buildMockId("pc"),
     owner: String(payload.owner || "").trim(),
+    company: String(payload.company || "").trim(),
     serial: String(payload.serial || "").trim(),
     machine: String(payload.machine || "").trim(),
     deviceStatus: String(payload.deviceStatus || "ativo").trim().toLowerCase(),
@@ -1316,9 +1335,11 @@ function normalizeMockComputerMovement(payload, computer, actorEmail) {
     serial: computer.serial,
     machine: computer.machine,
     previousOwner: computer.owner,
+    previousCompany: computer.company || "",
     previousCorporateEmail: computer.corporateEmail || "",
     previousDeviceStatus: computer.deviceStatus || "ativo",
     nextOwner: String(payload.nextOwner || "").trim(),
+    nextCompany: String(payload.nextCompany || "").trim(),
     nextCorporateEmail: String(payload.nextCorporateEmail || "").trim().toLowerCase(),
     nextDeviceStatus,
     reason: String(payload.reason || "").trim(),
@@ -1505,6 +1526,7 @@ const mockInventoryService = {
     const updatedComputer = {
       ...computer,
       owner: movementType === "devolucao" ? "Estoque" : movement.nextOwner,
+      company: movementType === "devolucao" ? "" : movement.nextCompany,
       corporateEmail: movementType === "devolucao" ? "" : movement.nextCorporateEmail,
       deviceStatus: movement.nextDeviceStatus
     };
@@ -1546,6 +1568,7 @@ const mockInventoryService = {
       return {
         ...computer,
         owner: movement.previousOwner || "",
+        company: movement.previousCompany || "",
         corporateEmail: movement.previousCorporateEmail || "",
         deviceStatus: movement.previousDeviceStatus || "ativo"
       };

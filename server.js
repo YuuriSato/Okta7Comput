@@ -140,6 +140,7 @@ function mapComputerRow(row) {
   return {
     id: String(row.id),
     owner: row.owner_name || "",
+    company: row.company_name || "",
     serial: row.serial_number || "",
     machine: row.machine_model || "",
     deviceStatus: row.device_status || "ativo",
@@ -167,9 +168,11 @@ function mapComputerMovementRow(row) {
     serial: row.serial_number || "",
     machine: row.machine_model || "",
     previousOwner: row.previous_owner || "",
+    previousCompany: row.previous_company_name || "",
     previousCorporateEmail: row.previous_corporate_email || "",
     previousDeviceStatus: row.previous_device_status || "ativo",
     nextOwner: row.next_owner || "",
+    nextCompany: row.next_company_name || "",
     nextCorporateEmail: row.next_corporate_email || "",
     nextDeviceStatus: row.next_device_status || "ativo",
     reason: row.reason || "",
@@ -771,6 +774,7 @@ app.post("/api/computer-movements", authRequired, async (req, res) => {
   const computerId = Number(req.body?.computerId);
   const movementType = String(req.body?.movementType || "").trim().toLowerCase();
   const nextOwner = String(req.body?.nextOwner || "").trim();
+  const nextCompany = String(req.body?.nextCompany || "").trim();
   const nextCorporateEmail = normalizeEmail(req.body?.nextCorporateEmail || "");
   const reason = String(req.body?.reason || "").trim();
 
@@ -792,7 +796,7 @@ app.post("/api/computer-movements", authRequired, async (req, res) => {
     await connection.beginTransaction();
 
     const [computerRows] = await connection.execute(
-      `SELECT c.id, c.owner_name, c.serial_number, c.machine_model, c.device_status, ce.email AS corporate_email
+      `SELECT c.id, c.owner_name, c.company_name, c.serial_number, c.machine_model, c.device_status, ce.email AS corporate_email
        FROM computers c
        LEFT JOIN corporate_emails ce ON ce.id = c.corporate_email_id
        WHERE c.id = ?
@@ -811,14 +815,15 @@ app.post("/api/computer-movements", authRequired, async (req, res) => {
       ? await resolveCorporateEmailIdByEmail(connection, nextCorporateEmail)
       : null;
     const targetOwner = movementType === "devolucao" ? "Estoque" : nextOwner;
+    const targetCompany = movementType === "devolucao" ? "" : nextCompany;
     const targetEmail = movementType === "devolucao" ? "" : nextCorporateEmail;
     const targetStatus = movementType === "devolucao" ? "pendente" : "ativo";
 
     await connection.execute(
       `UPDATE computers
-       SET owner_name = ?, corporate_email_id = ?, device_status = ?
+       SET owner_name = ?, company_name = ?, corporate_email_id = ?, device_status = ?
        WHERE id = ?`,
-      [targetOwner, resolvedEmailId, targetStatus, computerId]
+      [targetOwner, targetCompany || null, resolvedEmailId, targetStatus, computerId]
     );
 
     const [movementInsert] = await connection.execute(
@@ -826,22 +831,26 @@ app.post("/api/computer-movements", authRequired, async (req, res) => {
         computer_id,
         movement_type,
         previous_owner,
+        previous_company_name,
         previous_corporate_email,
         previous_device_status,
         next_owner,
+        next_company_name,
         next_corporate_email,
         next_device_status,
         reason,
         created_by_user_id,
         created_by_email
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         computerId,
         movementType,
         computer.owner_name || "",
+        computer.company_name || "",
         computer.corporate_email || "",
         computer.device_status || "ativo",
         targetOwner,
+        targetCompany || "",
         targetEmail,
         targetStatus,
         reason || null,
@@ -863,9 +872,11 @@ app.post("/api/computer-movements", authRequired, async (req, res) => {
       metadata: {
         serial: computer.serial_number,
         previousOwner: computer.owner_name || "",
+        previousCompany: computer.company_name || "",
         previousCorporateEmail: computer.corporate_email || "",
         previousDeviceStatus: computer.device_status || "ativo",
         nextOwner: targetOwner,
+        nextCompany: targetCompany || "",
         nextCorporateEmail: targetEmail,
         nextDeviceStatus: targetStatus,
         reason
@@ -913,7 +924,9 @@ app.delete("/api/computer-movements/:id", authRequired, async (req, res) => {
       metadata: {
         computerId: String(movement.computer_id),
         serial: movement.serial_number,
-        movementType: movement.movement_type
+        movementType: movement.movement_type,
+        previousCompany: movement.previous_company_name || "",
+        nextCompany: movement.next_company_name || ""
       }
     });
 
@@ -951,10 +964,11 @@ app.post("/api/computer-movements/:id/revert", authRequired, async (req, res) =>
     const previousCorporateEmailId = await resolveCorporateEmailIdByEmail(connection, movement.previous_corporate_email || "");
     await connection.execute(
       `UPDATE computers
-       SET owner_name = ?, corporate_email_id = ?, device_status = ?
+       SET owner_name = ?, company_name = ?, corporate_email_id = ?, device_status = ?
        WHERE id = ?`,
       [
         movement.previous_owner || "",
+        movement.previous_company_name || null,
         previousCorporateEmailId,
         movement.previous_device_status || "ativo",
         movement.computer_id
@@ -974,6 +988,7 @@ app.post("/api/computer-movements/:id/revert", authRequired, async (req, res) =>
         computerId: String(movement.computer_id),
         serial: movement.serial_number,
         restoredOwner: movement.previous_owner || "",
+        restoredCompany: movement.previous_company_name || "",
         restoredCorporateEmail: movement.previous_corporate_email || "",
         restoredDeviceStatus: movement.previous_device_status || "ativo"
       }
@@ -1141,6 +1156,7 @@ app.delete("/api/corporate-emails/:id", authRequired, async (req, res) => {
 function normalizeComputerPayload(body = {}) {
   const payload = {
     owner: String(body.owner || "").trim(),
+    company: String(body.company || "").trim(),
     serial: String(body.serial || "").trim(),
     machine: String(body.machine || "").trim(),
     deviceStatus: String(body.deviceStatus || "ativo").trim().toLowerCase(),
@@ -1215,6 +1231,7 @@ app.post("/api/computers", authRequired, async (req, res) => {
     const [insert] = await connection.execute(
       `INSERT INTO computers (
         owner_name,
+        company_name,
         serial_number,
         machine_model,
         device_status,
@@ -1230,9 +1247,10 @@ app.post("/api/computers", authRequired, async (req, res) => {
         notes,
         specs,
         corporate_email_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         payload.owner,
+        payload.company || null,
         payload.serial,
         payload.machine || null,
         payload.deviceStatus,
@@ -1259,7 +1277,7 @@ app.post("/api/computers", authRequired, async (req, res) => {
       entityType: "computer",
       entityId: String(insert.insertId),
       description: `Computador ${payload.serial} criado.`,
-      metadata: { serial: payload.serial, owner: payload.owner }
+      metadata: { serial: payload.serial, owner: payload.owner, company: payload.company || "" }
     });
     res.status(201).json({ computer: created });
   } catch (error) {
@@ -1297,6 +1315,7 @@ app.put("/api/computers/:id", authRequired, async (req, res) => {
     const [updateResult] = await connection.execute(
       `UPDATE computers
        SET owner_name = ?,
+           company_name = ?,
            serial_number = ?,
            machine_model = ?,
            device_status = ?,
@@ -1315,6 +1334,7 @@ app.put("/api/computers/:id", authRequired, async (req, res) => {
        WHERE id = ?`,
       [
         payload.owner,
+        payload.company || null,
         payload.serial,
         payload.machine || null,
         payload.deviceStatus,
@@ -1347,7 +1367,7 @@ app.put("/api/computers/:id", authRequired, async (req, res) => {
       entityType: "computer",
       entityId: String(id),
       description: `Computador ${payload.serial} atualizado.`,
-      metadata: { serial: payload.serial, owner: payload.owner }
+      metadata: { serial: payload.serial, owner: payload.owner, company: payload.company || "" }
     });
     res.json({ computer: updated });
   } catch (error) {
@@ -1374,7 +1394,7 @@ app.delete("/api/computers/:id", authRequired, async (req, res) => {
 
   try {
     const [existingRows] = await pool.execute(
-      "SELECT serial_number, owner_name FROM computers WHERE id = ? LIMIT 1",
+      "SELECT serial_number, owner_name, company_name FROM computers WHERE id = ? LIMIT 1",
       [id]
     );
     if (!existingRows.length) {
@@ -1392,7 +1412,8 @@ app.delete("/api/computers/:id", authRequired, async (req, res) => {
       description: `Computador ${existingRows[0].serial_number} removido.`,
       metadata: {
         serial: existingRows[0].serial_number,
-        owner: existingRows[0].owner_name
+        owner: existingRows[0].owner_name,
+        company: existingRows[0].company_name || ""
       }
     });
     res.json({ success: true });
