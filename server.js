@@ -168,8 +168,10 @@ function mapComputerMovementRow(row) {
     machine: row.machine_model || "",
     previousOwner: row.previous_owner || "",
     previousCorporateEmail: row.previous_corporate_email || "",
+    previousDeviceStatus: row.previous_device_status || "ativo",
     nextOwner: row.next_owner || "",
     nextCorporateEmail: row.next_corporate_email || "",
+    nextDeviceStatus: row.next_device_status || "ativo",
     reason: row.reason || "",
     createdByEmail: row.created_by_email || "",
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
@@ -199,6 +201,32 @@ async function listComputerMovements() {
   );
 
   return rows.map(mapComputerMovementRow);
+}
+
+async function getMovementById(connection, id) {
+  const executor = connection || pool;
+  const [rows] = await executor.execute(
+    `SELECT cm.*, c.serial_number, c.machine_model
+     FROM computer_movements cm
+     JOIN computers c ON c.id = cm.computer_id
+     WHERE cm.id = ?
+     LIMIT 1`,
+    [id]
+  );
+  return rows.length ? rows[0] : null;
+}
+
+async function isLatestMovementForComputer(connection, movement) {
+  const executor = connection || pool;
+  const [rows] = await executor.execute(
+    `SELECT id
+     FROM computer_movements
+     WHERE computer_id = ?
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [movement.computer_id]
+  );
+  return rows.length && Number(rows[0].id) === Number(movement.id);
 }
 
 async function countUsers(connection) {
@@ -764,7 +792,7 @@ app.post("/api/computer-movements", authRequired, async (req, res) => {
     await connection.beginTransaction();
 
     const [computerRows] = await connection.execute(
-      `SELECT c.id, c.owner_name, c.serial_number, c.machine_model, ce.email AS corporate_email
+      `SELECT c.id, c.owner_name, c.serial_number, c.machine_model, c.device_status, ce.email AS corporate_email
        FROM computers c
        LEFT JOIN corporate_emails ce ON ce.id = c.corporate_email_id
        WHERE c.id = ?
@@ -799,19 +827,23 @@ app.post("/api/computer-movements", authRequired, async (req, res) => {
         movement_type,
         previous_owner,
         previous_corporate_email,
+        previous_device_status,
         next_owner,
         next_corporate_email,
+        next_device_status,
         reason,
         created_by_user_id,
         created_by_email
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         computerId,
         movementType,
         computer.owner_name || "",
         computer.corporate_email || "",
+        computer.device_status || "ativo",
         targetOwner,
         targetEmail,
+        targetStatus,
         reason || null,
         req.auth.id,
         req.auth.email
@@ -832,8 +864,10 @@ app.post("/api/computer-movements", authRequired, async (req, res) => {
         serial: computer.serial_number,
         previousOwner: computer.owner_name || "",
         previousCorporateEmail: computer.corporate_email || "",
+        previousDeviceStatus: computer.device_status || "ativo",
         nextOwner: targetOwner,
         nextCorporateEmail: targetEmail,
+        nextDeviceStatus: targetStatus,
         reason
       }
     });
@@ -849,6 +883,112 @@ app.post("/api/computer-movements", authRequired, async (req, res) => {
       return;
     }
     res.status(500).json({ message: "Falha ao registrar movimentacao." });
+  } finally {
+    connection.release();
+  }
+});
+
+app.delete("/api/computer-movements/:id", authRequired, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ message: "ID invalido." });
+    return;
+  }
+
+  try {
+    const movement = await getMovementById(pool, id);
+    if (!movement) {
+      res.status(404).json({ message: "Movimentacao nao encontrada." });
+      return;
+    }
+
+    await pool.execute("DELETE FROM computer_movements WHERE id = ?", [id]);
+    await writeAuditLog({
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: "computer-movement.delete",
+      entityType: "computer-movement",
+      entityId: String(id),
+      description: `Movimentacao ${id} do computador ${movement.serial_number} removida do historico.`,
+      metadata: {
+        computerId: String(movement.computer_id),
+        serial: movement.serial_number,
+        movementType: movement.movement_type
+      }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: "Falha ao excluir movimentacao." });
+  }
+});
+
+app.post("/api/computer-movements/:id/revert", authRequired, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ message: "ID invalido." });
+    return;
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const movement = await getMovementById(connection, id);
+    if (!movement) {
+      await connection.rollback();
+      res.status(404).json({ message: "Movimentacao nao encontrada." });
+      return;
+    }
+
+    const latest = await isLatestMovementForComputer(connection, movement);
+    if (!latest) {
+      await connection.rollback();
+      res.status(400).json({ message: "So e possivel reverter a ultima movimentacao deste computador." });
+      return;
+    }
+
+    const previousCorporateEmailId = await resolveCorporateEmailIdByEmail(connection, movement.previous_corporate_email || "");
+    await connection.execute(
+      `UPDATE computers
+       SET owner_name = ?, corporate_email_id = ?, device_status = ?
+       WHERE id = ?`,
+      [
+        movement.previous_owner || "",
+        previousCorporateEmailId,
+        movement.previous_device_status || "ativo",
+        movement.computer_id
+      ]
+    );
+
+    await connection.execute("DELETE FROM computer_movements WHERE id = ?", [id]);
+    await writeAuditLog({
+      connection,
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: "computer-movement.revert",
+      entityType: "computer-movement",
+      entityId: String(id),
+      description: `Movimentacao ${id} do computador ${movement.serial_number} revertida.`,
+      metadata: {
+        computerId: String(movement.computer_id),
+        serial: movement.serial_number,
+        restoredOwner: movement.previous_owner || "",
+        restoredCorporateEmail: movement.previous_corporate_email || "",
+        restoredDeviceStatus: movement.previous_device_status || "ativo"
+      }
+    });
+
+    await connection.commit();
+    const computer = await getComputerById(movement.computer_id);
+    res.json({ success: true, computer });
+  } catch (error) {
+    await connection.rollback();
+    if (error.message === "EMAIL_NOT_ALLOWED") {
+      res.status(400).json({ message: "Nao foi possivel restaurar o email corporativo anterior." });
+      return;
+    }
+    res.status(500).json({ message: "Falha ao reverter movimentacao." });
   } finally {
     connection.release();
   }

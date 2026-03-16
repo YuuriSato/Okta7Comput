@@ -34,6 +34,7 @@ const elements = {
   metricSoon: document.getElementById("metric-soon"),
   metricExpired: document.getElementById("metric-expired"),
   commonSpecs: document.getElementById("common-specs"),
+  deviceStatusChart: document.getElementById("device-status-chart"),
   importInput: document.getElementById("import-csv-input"),
   importFeedback: document.getElementById("import-feedback"),
   downloadCsvTemplate: document.getElementById("download-csv-template"),
@@ -165,6 +166,12 @@ function setImportFeedback(message = "", kind = "ok") {
   elements.importFeedback.className = kind === "error"
     ? "mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
     : "mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700";
+}
+
+function describeDeviceStatus(status) {
+  if (status === "inativo") return { label: "Inativo", color: "#64748b", bg: "bg-slate-100", text: "text-slate-700" };
+  if (status === "pendente") return { label: "Pendente", color: "#f59e0b", bg: "bg-amber-50", text: "text-amber-700" };
+  return { label: "Ativo", color: "#10b981", bg: "bg-emerald-50", text: "text-emerald-700" };
 }
 
 function persistAuthSession(payload) {
@@ -424,11 +431,77 @@ function renderDashboard() {
   const active = all.filter((item) => getWarrantyStatus(item) === "ativa").length;
   const soon = all.filter((item) => getWarrantyStatus(item) === "proxima").length;
   const expired = all.filter((item) => getWarrantyStatus(item) === "vencida").length;
+  const deviceStatusTotals = ["ativo", "pendente", "inativo"].map((status) => ({
+    status,
+    count: all.filter((item) => (item.deviceStatus || "ativo") === status).length,
+    ...describeDeviceStatus(status)
+  }));
+  const chartTotal = deviceStatusTotals.reduce((acc, item) => acc + item.count, 0);
 
   elements.metricTotal.textContent = all.length;
   elements.metricActive.textContent = active;
   elements.metricSoon.textContent = soon;
   elements.metricExpired.textContent = expired;
+
+  if (!chartTotal) {
+    elements.deviceStatusChart.innerHTML = "<p class='text-slate-500'>Nenhum equipamento cadastrado para gerar o gráfico.</p>";
+  } else {
+    const radius = 70;
+    const circumference = 2 * Math.PI * radius;
+    let offsetAccumulator = 0;
+    const segments = deviceStatusTotals
+      .filter((item) => item.count > 0)
+      .map((item) => {
+        const value = item.count / chartTotal;
+        const dash = Math.max(0, circumference * value);
+        const segment = `
+          <circle
+            cx="90"
+            cy="90"
+            r="${radius}"
+            fill="none"
+            stroke="${item.color}"
+            stroke-width="18"
+            stroke-dasharray="${dash} ${circumference - dash}"
+            stroke-dashoffset="${-offsetAccumulator}"
+            stroke-linecap="round"
+            transform="rotate(-90 90 90)"
+          ></circle>
+        `;
+        offsetAccumulator += dash;
+        return segment;
+      })
+      .join("");
+
+    elements.deviceStatusChart.innerHTML = `
+      <div class="flex flex-col items-center gap-6 lg:flex-row lg:items-center">
+        <div class="relative flex h-[180px] w-[180px] items-center justify-center">
+          <svg viewBox="0 0 180 180" class="h-[180px] w-[180px]">
+            <circle cx="90" cy="90" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="18"></circle>
+            ${segments}
+          </svg>
+          <div class="absolute text-center">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total</p>
+            <p class="text-3xl font-extrabold text-slate-900">${chartTotal}</p>
+          </div>
+        </div>
+        <div class="w-full space-y-3">
+          ${deviceStatusTotals.map((item) => `
+            <div class="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3">
+              <div class="flex items-center gap-3">
+                <span class="h-3 w-3 rounded-full" style="background:${item.color}"></span>
+                <div>
+                  <p class="text-sm font-semibold text-slate-900">${item.label}</p>
+                  <p class="text-xs text-slate-500">${chartTotal ? Math.round((item.count / chartTotal) * 100) : 0}% do total</p>
+                </div>
+              </div>
+              <span class="rounded-full ${item.bg} px-3 py-1 text-sm font-semibold ${item.text}">${item.count}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
 
   const grouped = all.reduce((acc, item) => {
     const key = item.specs.trim() || "Sem especificacao";
@@ -549,12 +622,18 @@ function renderMovements() {
   syncMovementForm();
 
   const rows = state.computerMovements;
+  const latestByComputerId = new Map();
+  rows.forEach((movement) => {
+    if (!latestByComputerId.has(movement.computerId)) {
+      latestByComputerId.set(movement.computerId, movement.id);
+    }
+  });
   elements.movementCount.textContent = `${rows.length} movimentação(ões)`;
 
   if (!rows.length) {
     elements.movementTableBody.innerHTML = `
       <tr>
-        <td colspan="7" class="px-4 py-8 text-center text-slate-500">Nenhuma movimentação registrada.</td>
+        <td colspan="8" class="px-4 py-8 text-center text-slate-500">Nenhuma movimentação registrada.</td>
       </tr>
     `;
     return;
@@ -584,6 +663,12 @@ function renderMovements() {
       </td>
       <td class="px-4 py-4">${escapeHtml(movement.reason || "-")}</td>
       <td class="px-4 py-4">${escapeHtml(movement.createdByEmail || "-")}</td>
+      <td class="px-4 py-4">
+        <div class="flex justify-end gap-2">
+          <button data-movement-action="delete" data-id="${movement.id}" class="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">Excluir</button>
+          <button data-movement-action="revert" data-id="${movement.id}" class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100" ${latestByComputerId.get(movement.computerId) !== movement.id ? "disabled title=\"Reverta apenas a ultima movimentacao deste computador\"" : ""}>Reverter</button>
+        </div>
+      </td>
     </tr>
   `).join("");
 }
@@ -797,6 +882,32 @@ async function createComputerMovement(formData) {
 
   await inventoryService.createComputerMovement(state.auth.token, payload);
   await refreshInventoryData();
+}
+
+async function deleteComputerMovement(id) {
+  if (!state.auth.token) {
+    throw new Error("Sessao invalida. Faca login novamente.");
+  }
+
+  const confirmed = window.confirm("Deseja excluir este registro de movimentacao? O estado atual do computador nao sera alterado.");
+  if (!confirmed) return false;
+
+  await inventoryService.deleteComputerMovement(state.auth.token, id);
+  await refreshInventoryData();
+  return true;
+}
+
+async function revertComputerMovement(id) {
+  if (!state.auth.token) {
+    throw new Error("Sessao invalida. Faca login novamente.");
+  }
+
+  const confirmed = window.confirm("Deseja reverter esta movimentacao e restaurar o computador para o estado anterior?");
+  if (!confirmed) return false;
+
+  await inventoryService.revertComputerMovement(state.auth.token, id);
+  await refreshInventoryData();
+  return true;
 }
 
 function viewComputer(id) {
@@ -1196,16 +1307,20 @@ function buildMockCorporateEmailsWithCounts() {
 }
 
 function normalizeMockComputerMovement(payload, computer, actorEmail) {
+  const movementType = String(payload.movementType || "devolucao").trim().toLowerCase();
+  const nextDeviceStatus = movementType === "devolucao" ? "pendente" : "ativo";
   return {
     id: buildMockId("move"),
     computerId: computer.id,
-    movementType: String(payload.movementType || "devolucao").trim().toLowerCase(),
+    movementType,
     serial: computer.serial,
     machine: computer.machine,
     previousOwner: computer.owner,
     previousCorporateEmail: computer.corporateEmail || "",
+    previousDeviceStatus: computer.deviceStatus || "ativo",
     nextOwner: String(payload.nextOwner || "").trim(),
     nextCorporateEmail: String(payload.nextCorporateEmail || "").trim().toLowerCase(),
+    nextDeviceStatus,
     reason: String(payload.reason || "").trim(),
     createdByEmail: actorEmail,
     createdAt: new Date().toISOString()
@@ -1391,7 +1506,7 @@ const mockInventoryService = {
       ...computer,
       owner: movementType === "devolucao" ? "Estoque" : movement.nextOwner,
       corporateEmail: movementType === "devolucao" ? "" : movement.nextCorporateEmail,
-      deviceStatus: movementType === "devolucao" ? "pendente" : "ativo"
+      deviceStatus: movement.nextDeviceStatus
     };
 
     writeMockComputers(computers.map((item) => item.id === computer.id ? updatedComputer : item));
@@ -1399,6 +1514,46 @@ const mockInventoryService = {
     movements.push(movement);
     writeMockComputerMovements(movements);
     return movement;
+  },
+
+  async deleteComputerMovement(_token, id) {
+    const movements = readMockComputerMovements();
+    const filtered = movements.filter((movement) => movement.id !== id);
+    if (filtered.length === movements.length) {
+      throw new Error("Movimentacao nao encontrada.");
+    }
+    writeMockComputerMovements(filtered);
+    return true;
+  },
+
+  async revertComputerMovement(_token, id) {
+    const movements = readMockComputerMovements();
+    const movement = movements.find((item) => item.id === id);
+    if (!movement) {
+      throw new Error("Movimentacao nao encontrada.");
+    }
+
+    const latestForComputer = sortByCreatedAtDesc(
+      movements.filter((item) => item.computerId === movement.computerId)
+    )[0];
+    if (!latestForComputer || latestForComputer.id !== movement.id) {
+      throw new Error("So e possivel reverter a ultima movimentacao deste computador.");
+    }
+
+    const computers = readMockComputers();
+    const updatedComputers = computers.map((computer) => {
+      if (computer.id !== movement.computerId) return computer;
+      return {
+        ...computer,
+        owner: movement.previousOwner || "",
+        corporateEmail: movement.previousCorporateEmail || "",
+        deviceStatus: movement.previousDeviceStatus || "ativo"
+      };
+    });
+
+    writeMockComputers(updatedComputers);
+    writeMockComputerMovements(movements.filter((item) => item.id !== id));
+    return updatedComputers.find((computer) => computer.id === movement.computerId) || null;
   }
 };
 
@@ -1713,6 +1868,32 @@ const inventoryService = {
     return result.data.movement;
   },
 
+  async deleteComputerMovement(token, id) {
+    if (AUTH_USE_MOCK) return mockInventoryService.deleteComputerMovement(token, id);
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/computer-movements/${encodeURIComponent(id)}`,
+      method: "DELETE",
+      token
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao excluir movimentacao.");
+    }
+    return true;
+  },
+
+  async revertComputerMovement(token, id) {
+    if (AUTH_USE_MOCK) return mockInventoryService.revertComputerMovement(token, id);
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/computer-movements/${encodeURIComponent(id)}/revert`,
+      method: "POST",
+      token
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao reverter movimentacao.");
+    }
+    return result.data.computer || null;
+  },
+
   async listUsers(token) {
     const result = await apiRequest({
       url: `${API_BASE_URL}/users`,
@@ -1963,6 +2144,31 @@ function bindEvents() {
       render();
     } catch (error) {
       setMovementFeedback(error.message || "Falha ao registrar movimentacao.", "error");
+    }
+  });
+
+  elements.movementTableBody.addEventListener("click", async (event) => {
+    if (!state.auth.isAuthenticated) return;
+    const button = event.target.closest("button[data-movement-action]");
+    if (!button) return;
+
+    try {
+      if (button.dataset.movementAction === "delete") {
+        const changed = await deleteComputerMovement(button.dataset.id);
+        if (changed) {
+          setMovementFeedback("Movimentacao excluida com sucesso.", "ok");
+          render();
+        }
+      }
+      if (button.dataset.movementAction === "revert") {
+        const changed = await revertComputerMovement(button.dataset.id);
+        if (changed) {
+          setMovementFeedback("Movimentacao revertida e computador restaurado.", "ok");
+          render();
+        }
+      }
+    } catch (error) {
+      setMovementFeedback(error.message || "Falha ao processar movimentacao.", "error");
     }
   });
 

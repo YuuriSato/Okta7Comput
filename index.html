@@ -102,11 +102,19 @@
             </article>
           </div>
 
-          <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
-            <h3 class="text-2xl font-bold">Configurações Mais Comuns</h3>
-            <p class="mt-1 text-slate-500">Distribuição de especificações técnicas</p>
-            <div id="common-specs" class="mt-6 space-y-4"></div>
-          </section>
+          <div class="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+            <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
+              <h3 class="text-2xl font-bold">Status dos Equipamentos</h3>
+              <p class="mt-1 text-slate-500">Distribuição atual do parque por status do dispositivo</p>
+              <div id="device-status-chart" class="mt-6"></div>
+            </section>
+
+            <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
+              <h3 class="text-2xl font-bold">Configurações Mais Comuns</h3>
+              <p class="mt-1 text-slate-500">Distribuição de especificações técnicas</p>
+              <div id="common-specs" class="mt-6 space-y-4"></div>
+            </section>
+          </div>
         </section>
 
         <section id="view-computadores" class="hidden space-y-6">
@@ -327,6 +335,7 @@
                       <th class="px-4 py-3">Para</th>
                       <th class="px-4 py-3">Motivo</th>
                       <th class="px-4 py-3">Registrado por</th>
+                      <th class="px-4 py-3 text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody id="movement-table-body" class="divide-y divide-slate-200 text-sm"></tbody>

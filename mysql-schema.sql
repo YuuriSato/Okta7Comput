@@ -79,8 +79,10 @@ CREATE TABLE IF NOT EXISTS computer_movements (
   movement_type ENUM('devolucao','troca') NOT NULL,
   previous_owner VARCHAR(120) NULL,
   previous_corporate_email VARCHAR(255) NULL,
+  previous_device_status ENUM('ativo','inativo','pendente') NOT NULL DEFAULT 'ativo',
   next_owner VARCHAR(120) NULL,
   next_corporate_email VARCHAR(255) NULL,
+  next_device_status ENUM('ativo','inativo','pendente') NOT NULL DEFAULT 'ativo',
   reason TEXT NULL,
   created_by_user_id BIGINT UNSIGNED NULL,
   created_by_email VARCHAR(255) NULL,
@@ -219,6 +221,48 @@ SET @exists := (
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'corporate_email_id'
 );
 SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN corporate_email_id BIGINT UNSIGNED NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computer_movements'
+);
+SET @sql := IF(@exists = 0,
+  'CREATE TABLE computer_movements (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    computer_id BIGINT UNSIGNED NOT NULL,
+    movement_type ENUM(''devolucao'',''troca'') NOT NULL,
+    previous_owner VARCHAR(120) NULL,
+    previous_corporate_email VARCHAR(255) NULL,
+    previous_device_status ENUM(''ativo'',''inativo'',''pendente'') NOT NULL DEFAULT ''ativo'',
+    next_owner VARCHAR(120) NULL,
+    next_corporate_email VARCHAR(255) NULL,
+    next_device_status ENUM(''ativo'',''inativo'',''pendente'') NOT NULL DEFAULT ''ativo'',
+    reason TEXT NULL,
+    created_by_user_id BIGINT UNSIGNED NULL,
+    created_by_email VARCHAR(255) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_computer_movements_created_at (created_at),
+    KEY idx_computer_movements_computer_id (computer_id),
+    CONSTRAINT fk_computer_movements_computer FOREIGN KEY (computer_id) REFERENCES computers (id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_computer_movements_created_by_user FOREIGN KEY (created_by_user_id) REFERENCES users (id) ON UPDATE CASCADE ON DELETE SET NULL
+  )',
+  'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computer_movements' AND COLUMN_NAME = 'previous_device_status'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE computer_movements ADD COLUMN previous_device_status ENUM(''ativo'',''inativo'',''pendente'') NOT NULL DEFAULT ''ativo'' AFTER previous_corporate_email', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computer_movements' AND COLUMN_NAME = 'next_device_status'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE computer_movements ADD COLUMN next_device_status ENUM(''ativo'',''inativo'',''pendente'') NOT NULL DEFAULT ''ativo'' AFTER next_corporate_email', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- Seed opcional:
