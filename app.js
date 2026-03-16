@@ -829,9 +829,6 @@ const CSV_COLUMNS = [
   { key: "deviceStatus", header: "status", aliases: ["devicestatus"], example: "ativo" },
   { key: "purchaseDate", header: "data_compra", aliases: ["datacompra", "datadecompra", "purchasedate"], example: "2026-03-16" },
   { key: "warrantyMonths", header: "garantia_meses", aliases: ["garantiameses", "warrantymonths"], example: "12" },
-  { key: "cpu", header: "cpu", example: "Intel Core i7" },
-  { key: "ram", header: "ram", example: "16 GB" },
-  { key: "gpu", header: "gpu", example: "Intel Iris Xe" },
   { key: "storage", header: "armazenamento", aliases: ["storage"], example: "512 GB" },
   { key: "storageType", header: "tipo_armazenamento", aliases: ["storagetype", "tipodearmazenamento"], example: "SSD" },
   { key: "os", header: "sistema_operacional", aliases: ["sistemaoperacional", "operatingsystem", "os"], example: "Windows 11 Pro" },
@@ -840,6 +837,12 @@ const CSV_COLUMNS = [
   { key: "specs", header: "specs", aliases: ["resumospecs"], example: "Intel Core i7 / 16 GB / 512 GB SSD / Windows 11 Pro" },
   { key: "createdAt", header: "cadastro", aliases: ["createdat"], example: "2026-03-16 09:00:00" }
 ];
+
+const LEGACY_CSV_HEADER_MAP = {
+  cpu: "cpu",
+  ram: "ram",
+  gpu: "gpu"
+};
 
 function normalizeCsvHeader(header) {
   const normalized = String(header || "")
@@ -855,7 +858,7 @@ function normalizeCsvHeader(header) {
     return candidates.includes(normalized);
   });
 
-  return matched?.key || String(header || "").trim();
+  return matched?.key || LEGACY_CSV_HEADER_MAP[normalized] || String(header || "").trim();
 }
 
 function csvValueForExport(column, computer) {
