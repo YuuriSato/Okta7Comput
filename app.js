@@ -13,6 +13,7 @@ const API_BASE_URL = String(appConfig.API_BASE_URL || defaultApiBase).replace(/\
 const AUTH_BASE_URL = `${API_BASE_URL}/auth`;
 const AUTH_USE_MOCK = Boolean(appConfig.AUTH_USE_MOCK || false);
 
+// Cache central de elementos para evitar queries repetidas no DOM.
 const elements = {
   appShell: document.getElementById("app-shell"),
   navButtons: Array.from(document.querySelectorAll(".nav-btn")),
@@ -104,6 +105,7 @@ const state = {
   }
 };
 
+// Recupera a sessao persistida e normaliza o papel para evitar valores inesperados.
 function loadUser() {
   try {
     const user = JSON.parse(localStorage.getItem(AUTH_USER_KEY) || "null");
@@ -267,6 +269,7 @@ function renderNav() {
 }
 
 function getRemainingDays(computer) {
+  // Preferimos a data de compra quando existe; o fallback por createdAt cobre cadastros legados.
   if (computer.purchaseDate && (computer.warrantyMonths || computer.warrantyMonths === 0)) {
     const startDate = new Date(computer.purchaseDate);
     if (!Number.isNaN(startDate.getTime())) {
@@ -357,6 +360,7 @@ function movementTypeBadge(type) {
   return '<span class="inline-flex rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">Devolução</span>';
 }
 
+// A troca exige novos dados de destino; a devolucao limpa os campos porque o ativo volta ao estoque.
 function syncMovementForm() {
   const selectedComputer = state.computers.find((item) => item.id === elements.movementComputer.value);
   const movementType = String(elements.movementType.value || "devolucao").toLowerCase();
@@ -451,6 +455,7 @@ function renderDashboard() {
   if (!chartTotal) {
     elements.deviceStatusChart.innerHTML = "<p class='text-slate-500'>Nenhum equipamento cadastrado para gerar o gráfico.</p>";
   } else {
+    // O grafico circular eh montado manualmente em SVG para nao depender de biblioteca externa.
     const radius = 70;
     const circumference = 2 * Math.PI * radius;
     let offsetAccumulator = 0;
@@ -632,6 +637,7 @@ function renderMovements() {
   syncMovementForm();
 
   const rows = state.computerMovements;
+  // O botao de reversao so aparece ativo para a movimentacao mais recente de cada computador.
   const latestByComputerId = new Map();
   rows.forEach((movement) => {
     if (!latestByComputerId.has(movement.computerId)) {
@@ -972,6 +978,7 @@ const LEGACY_CSV_HEADER_MAP = {
   gpu: "gpu"
 };
 
+// Aceita o cabecalho novo e alguns aliases antigos para manter compatibilidade com planilhas anteriores.
 function normalizeCsvHeader(header) {
   const normalized = String(header || "")
     .trim()
@@ -1010,6 +1017,7 @@ function downloadExcelWorkbook({ filename, title, subtitle, rows }) {
     return false;
   }
 
+  // As primeiras linhas servem como instrucoes e o header real fica separado da area de preenchimento.
   const headers = CSV_COLUMNS.map((column) => column.header);
   const sheetRows = [
     [title],
@@ -1118,6 +1126,7 @@ function importCsv(file) {
       .map((line) => {
         const values = parseCsvLine(line, delimiter);
         const row = Object.fromEntries(headers.map((key, idx) => [key, values[idx] || ""]));
+        // A importacao converte tudo para o formato que a API ja espera, evitando regras duplicadas depois.
         const normalized = {
           owner: row.owner.trim(),
           company: row.company?.trim() || "",
@@ -1325,6 +1334,7 @@ function buildMockCorporateEmailsWithCounts() {
   );
 }
 
+// O modo mock replica os formatos do backend para a UI funcionar igual com ou sem API real.
 function normalizeMockComputerMovement(payload, computer, actorEmail) {
   const movementType = String(payload.movementType || "devolucao").trim().toLowerCase();
   const nextDeviceStatus = movementType === "devolucao" ? "pendente" : "ativo";
@@ -1634,6 +1644,7 @@ async function loadAuthConfig() {
   state.auth.corporateEmailDomain = String(result.data?.corporateEmailDomain || "");
 }
 
+// Em desenvolvimento ou contingencia, alguns endpoints podem cair no mock para a interface continuar utilizavel.
 function canUseMockFallback(result) {
   if (!AUTH_USE_MOCK) return false;
   if (result.networkError) return true;
@@ -1965,7 +1976,7 @@ async function refreshInventoryData() {
     return;
   }
 
-  // Carregamento em paralelo para reduzir tempo de espera apos login e refresh.
+  // Carregamos tudo em paralelo para o painel nao ficar lento apos login, importacao ou troca.
   const promises = [
     inventoryService.listComputers(state.auth.token),
     inventoryService.listCorporateEmails(state.auth.token),
@@ -2054,6 +2065,7 @@ async function logout() {
 }
 
 function bindEvents() {
+  // Toda a tela e dirigida por eventos; daqui sai a navegacao, modais, importacao e movimentacoes.
   elements.navButtons.forEach((button) => {
     button.addEventListener("click", () => {
       if (!state.auth.isAuthenticated) return;
