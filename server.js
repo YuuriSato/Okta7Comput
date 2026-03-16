@@ -433,11 +433,6 @@ app.post("/api/auth/google", async (req, res) => {
       res.status(403).json({ message: "Conta Google sem email verificado." });
       return;
     }
-    if (!ensureCorporateEmailDomain(email)) {
-      res.status(403).json({ message: `Use uma conta Google corporativa @${CORPORATE_EMAIL_DOMAIN}.` });
-      return;
-    }
-
     const user = await upsertOAuthUser({
       email,
       provider: "google",

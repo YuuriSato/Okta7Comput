@@ -150,11 +150,8 @@ function setAuthMode(mode) {
   elements.oauthAuthSection.classList.toggle("hidden", state.auth.provider !== "google");
 
   if (state.auth.provider === "google") {
-    const domainCopy = state.auth.corporateEmailDomain
-      ? `Use sua conta Google corporativa @${state.auth.corporateEmailDomain} para entrar.`
-      : "Use sua conta Google corporativa para entrar.";
     elements.authSubtitle.textContent = "Entre com sua conta Google para acessar o inventario.";
-    elements.oauthAuthCopy.textContent = domainCopy;
+    elements.oauthAuthCopy.textContent = "Use sua conta Google para entrar.";
     return;
   }
 
