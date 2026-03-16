@@ -18,6 +18,8 @@ const elements = {
   dashboardView: document.getElementById("view-dashboard"),
   computersView: document.getElementById("view-computadores"),
   emailsView: document.getElementById("view-emails"),
+  permissionsView: document.getElementById("view-permissoes"),
+  historyView: document.getElementById("view-historico"),
   modalLayer: document.getElementById("modal-layer"),
   modalTitle: document.getElementById("modal-title"),
   form: document.getElementById("computer-form"),
@@ -51,6 +53,11 @@ const elements = {
   corporateEmailFeedback: document.getElementById("corporate-email-feedback"),
   corporateEmailCount: document.getElementById("corporate-email-count"),
   corporateEmailTableBody: document.getElementById("corporate-email-table-body"),
+  usersCount: document.getElementById("users-count"),
+  usersTableBody: document.getElementById("users-table-body"),
+  permissionsFeedback: document.getElementById("permissions-feedback"),
+  auditCount: document.getElementById("audit-count"),
+  auditTableBody: document.getElementById("audit-table-body"),
 };
 
 const state = {
@@ -60,6 +67,8 @@ const state = {
   statusFilter: "todos",
   computers: [],
   corporateEmails: [],
+  users: [],
+  auditLogs: [],
   theme: loadTheme(),
   auth: {
     user: loadUser(),
@@ -78,7 +87,9 @@ const state = {
 function loadUser() {
   try {
     const user = JSON.parse(localStorage.getItem(AUTH_USER_KEY) || "null");
-    return user && typeof user.email === "string" ? user : null;
+    return user && typeof user.email === "string"
+      ? { email: user.email, role: user.role === "admin" ? "admin" : "member" }
+      : null;
   } catch (error) {
     return null;
   }
@@ -191,6 +202,11 @@ function applyAuthGate() {
 
 function renderNav() {
   elements.navButtons.forEach((button) => {
+    const needsAdmin = button.dataset.nav === "permissoes";
+    button.classList.toggle("hidden", needsAdmin && !isAdmin());
+    if (needsAdmin && !isAdmin() && state.currentView === "permissoes") {
+      state.currentView = "dashboard";
+    }
     const active = button.dataset.nav === state.currentView;
     button.classList.toggle("bg-blue-50", active);
     button.classList.toggle("text-brand-600", active);
@@ -260,6 +276,31 @@ function renderCorporateEmailOptions(selectedEmail = "") {
     options.push(`<option value="${escapeHtml(item.email)}" ${selected}>${escapeHtml(item.email)}</option>`);
   });
   elements.computerCorporateEmail.innerHTML = options.join("");
+}
+
+function isAdmin() {
+  return state.auth.user?.role === "admin";
+}
+
+function roleLabel(role) {
+  return role === "admin" ? "Administrador" : "Membro";
+}
+
+function roleBadge(role) {
+  if (role === "admin") {
+    return '<span class="inline-flex rounded-full border border-indigo-300 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">Administrador</span>';
+  }
+  return '<span class="inline-flex rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">Membro</span>';
+}
+
+function providerLabel(provider) {
+  return provider === "google" ? "Google" : "Local";
+}
+
+function activeBadge(active) {
+  return active
+    ? '<span class="inline-flex rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Ativo</span>'
+    : '<span class="inline-flex rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">Inativo</span>';
 }
 
 
@@ -414,14 +455,89 @@ function renderCorporateEmails() {
     .join("");
 }
 
+function setPermissionsFeedback(message = "", kind = "muted") {
+  elements.permissionsFeedback.textContent = message;
+  elements.permissionsFeedback.className =
+    kind === "error" ? "text-sm text-rose-600"
+      : kind === "ok" ? "text-sm text-emerald-600"
+        : "text-sm text-slate-500";
+}
+
+function renderPermissions() {
+  const rows = state.users;
+  elements.usersCount.textContent = `${rows.length} usuário(s)`;
+
+  if (!isAdmin()) {
+    elements.usersTableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="px-4 py-8 text-center text-slate-500">Somente administradores podem gerenciar permissões.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  if (!rows.length) {
+    elements.usersTableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="px-4 py-8 text-center text-slate-500">Nenhum usuário encontrado.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  elements.usersTableBody.innerHTML = rows.map((user) => `
+    <tr class="hover:bg-slate-50/80">
+      <td class="px-4 py-4 font-medium">${escapeHtml(user.email)}</td>
+      <td class="px-4 py-4">${roleBadge(user.role)}</td>
+      <td class="px-4 py-4">${escapeHtml(providerLabel(user.authProvider))}</td>
+      <td class="px-4 py-4">${activeBadge(user.active)}</td>
+      <td class="px-4 py-4">${formatDate(user.createdAt)}</td>
+      <td class="px-4 py-4 text-right">
+        <div class="flex justify-end gap-2">
+          <button data-user-action="make-member" data-id="${user.id}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100" ${user.role !== "admin" ? "disabled" : ""}>Tornar Membro</button>
+          <button data-user-action="make-admin" data-id="${user.id}" class="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100" ${user.role === "admin" ? "disabled" : ""}>Tornar Admin</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function renderAuditLogs() {
+  const rows = state.auditLogs;
+  elements.auditCount.textContent = `${rows.length} evento(s)`;
+
+  if (!rows.length) {
+    elements.auditTableBody.innerHTML = `
+      <tr>
+        <td colspan="5" class="px-4 py-8 text-center text-slate-500">Nenhum evento encontrado.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  elements.auditTableBody.innerHTML = rows.map((log) => `
+    <tr class="hover:bg-slate-50/80">
+      <td class="px-4 py-4">${new Date(log.createdAt).toLocaleString("pt-BR")}</td>
+      <td class="px-4 py-4">${escapeHtml(log.actorEmail || "-")}</td>
+      <td class="px-4 py-4">${escapeHtml(log.actionType)}</td>
+      <td class="px-4 py-4">${escapeHtml(log.entityType)}${log.entityId ? ` #${escapeHtml(log.entityId)}` : ""}</td>
+      <td class="px-4 py-4">${escapeHtml(log.description)}</td>
+    </tr>
+  `).join("");
+}
+
 function render() {
   elements.dashboardView.classList.toggle("hidden", state.currentView !== "dashboard");
   elements.computersView.classList.toggle("hidden", state.currentView !== "computadores");
   elements.emailsView.classList.toggle("hidden", state.currentView !== "emails");
+  elements.permissionsView.classList.toggle("hidden", state.currentView !== "permissoes");
+  elements.historyView.classList.toggle("hidden", state.currentView !== "historico");
   renderNav();
   renderDashboard();
   renderTable();
   renderCorporateEmails();
+  renderPermissions();
+  renderAuditLogs();
   applyAuthGate();
   renderGoogleAuth();
 }
@@ -1107,7 +1223,7 @@ function normalizeAuthPayload(data) {
   }
   return {
     token: data.token,
-    user: { email: data.user.email }
+    user: { email: data.user.email, role: data.user.role === "admin" ? "admin" : "member" }
   };
 }
 
@@ -1115,7 +1231,7 @@ function normalizeMePayload(data) {
   if (!data || !data.user || typeof data.user.email !== "string") {
     throw new Error("Sessao invalida.");
   }
-  return { user: { email: data.user.email } };
+  return { user: { email: data.user.email, role: data.user.role === "admin" ? "admin" : "member" } };
 }
 
 async function handleGoogleCredentialResponse(response) {
@@ -1271,6 +1387,43 @@ const inventoryService = {
       throw new Error(result.message || "Falha ao remover email corporativo.");
     }
     return true;
+  },
+
+  async listUsers(token) {
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/users`,
+      method: "GET",
+      token
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao carregar usuarios.");
+    }
+    return Array.isArray(result.data.users) ? result.data.users : [];
+  },
+
+  async updateUserRole(token, id, role) {
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/users/${encodeURIComponent(id)}/role`,
+      method: "PUT",
+      token,
+      body: { role }
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao atualizar permissao.");
+    }
+    return result.data.user;
+  },
+
+  async listAuditLogs(token) {
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/audit-logs`,
+      method: "GET",
+      token
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao carregar historico.");
+    }
+    return Array.isArray(result.data.logs) ? result.data.logs : [];
   }
 };
 
@@ -1278,17 +1431,28 @@ async function refreshInventoryData() {
   if (!state.auth.isAuthenticated || !state.auth.token) {
     state.computers = [];
     state.corporateEmails = [];
+    state.users = [];
+    state.auditLogs = [];
     return;
   }
 
   // Carregamento em paralelo para reduzir tempo de espera apos login e refresh.
-  const [computers, corporateEmails] = await Promise.all([
+  const promises = [
     inventoryService.listComputers(state.auth.token),
     inventoryService.listCorporateEmails(state.auth.token)
-  ]);
+  ];
+
+  if (isAdmin()) {
+    promises.push(inventoryService.listUsers(state.auth.token));
+  }
+  promises.push(inventoryService.listAuditLogs(state.auth.token));
+
+  const [computers, corporateEmails, maybeUsersOrLogs, maybeLogs] = await Promise.all(promises);
 
   state.computers = computers;
   state.corporateEmails = corporateEmails;
+  state.users = isAdmin() ? maybeUsersOrLogs : [];
+  state.auditLogs = isAdmin() ? maybeLogs : maybeUsersOrLogs;
 }
 
 async function validateExistingSession() {
@@ -1346,9 +1510,12 @@ async function logout() {
   clearAuthSession();
   state.computers = [];
   state.corporateEmails = [];
+  state.users = [];
+  state.auditLogs = [];
   closeModal();
   setAuthMode("login");
   setAuthError("");
+  setPermissionsFeedback("");
   render();
 }
 
@@ -1358,6 +1525,7 @@ function bindEvents() {
       if (!state.auth.isAuthenticated) return;
       state.currentView = button.dataset.nav;
       setCorporateFeedback("");
+      setPermissionsFeedback("");
       render();
     });
   });
@@ -1424,6 +1592,22 @@ function bindEvents() {
       render();
     } catch (error) {
       setCorporateFeedback(error.message || "Falha ao remover email.", "error");
+    }
+  });
+
+  elements.usersTableBody.addEventListener("click", async (event) => {
+    if (!state.auth.isAuthenticated || !isAdmin()) return;
+    const button = event.target.closest("button[data-user-action]");
+    if (!button) return;
+
+    const role = button.dataset.userAction === "make-admin" ? "admin" : "member";
+    try {
+      await inventoryService.updateUserRole(state.auth.token, button.dataset.id, role);
+      setPermissionsFeedback(`Permissão atualizada para ${roleLabel(role)}.`, "ok");
+      await refreshInventoryData();
+      render();
+    } catch (error) {
+      setPermissionsFeedback(error.message || "Falha ao atualizar permissao.", "error");
     }
   });
 

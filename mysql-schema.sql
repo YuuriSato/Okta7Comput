@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   auth_provider VARCHAR(32) NOT NULL DEFAULT 'local',
   provider_subject VARCHAR(255) NULL,
+  role_name VARCHAR(32) NOT NULL DEFAULT 'member',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_users_email (email),
@@ -24,6 +25,24 @@ CREATE TABLE IF NOT EXISTS users (
     FOREIGN KEY (corporate_email_id) REFERENCES corporate_emails (id)
     ON UPDATE CASCADE
     ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  actor_user_id BIGINT UNSIGNED NULL,
+  actor_email VARCHAR(255) NULL,
+  action_type VARCHAR(80) NOT NULL,
+  entity_type VARCHAR(80) NOT NULL,
+  entity_id VARCHAR(120) NULL,
+  description TEXT NOT NULL,
+  metadata_json JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_audit_logs_created_at (created_at),
+  KEY idx_audit_logs_actor_user_id (actor_user_id),
+  CONSTRAINT fk_audit_logs_actor_user
+    FOREIGN KEY (actor_user_id) REFERENCES users (id)
+    ON UPDATE CASCADE
+    ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS computers (
@@ -71,6 +90,13 @@ SET @exists := (
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'provider_subject'
 );
 SET @sql := IF(@exists = 0, 'ALTER TABLE users ADD COLUMN provider_subject VARCHAR(255) NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role_name'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE users ADD COLUMN role_name VARCHAR(32) NOT NULL DEFAULT ''member''', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (

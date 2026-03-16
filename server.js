@@ -15,6 +15,10 @@ const DB_SSL = String(process.env.DB_SSL || "true").toLowerCase() === "true";
 const DB_AUTO_APPLY_SCHEMA = String(process.env.DB_AUTO_APPLY_SCHEMA || "true").toLowerCase() === "true";
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || "").trim();
 const GOOGLE_AUTH_ENABLED = Boolean(GOOGLE_CLIENT_ID);
+const ADMIN_EMAILS = String(process.env.ADMIN_EMAILS || "")
+  .split(",")
+  .map((item) => normalizeEmail(item))
+  .filter(Boolean);
 const CORPORATE_EMAIL_DOMAIN = String(process.env.CORPORATE_EMAIL_DOMAIN || "okta7.com.br")
   .trim()
   .toLowerCase();
@@ -105,6 +109,14 @@ function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
 
+function isAdminEmail(email) {
+  return ADMIN_EMAILS.includes(normalizeEmail(email));
+}
+
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase() === "admin" ? "admin" : "member";
+}
+
 function ensureCorporateEmailDomain(email) {
   if (!CORPORATE_EMAIL_DOMAIN) return true;
   return normalizeEmail(email).endsWith(`@${CORPORATE_EMAIL_DOMAIN}`);
@@ -160,6 +172,52 @@ async function getComputerById(id) {
   return mapComputerRow(rows[0]);
 }
 
+async function countUsers(connection) {
+  const executor = connection || pool;
+  const [rows] = await executor.execute("SELECT COUNT(*) AS total FROM users");
+  return Number(rows[0]?.total || 0);
+}
+
+async function decideUserRole(connection, email, explicitRole = "") {
+  if (normalizeRole(explicitRole) === "admin") return "admin";
+  if (isAdminEmail(email)) return "admin";
+  const totalUsers = await countUsers(connection);
+  return totalUsers === 0 ? "admin" : "member";
+}
+
+async function writeAuditLog({
+  connection = null,
+  actorUserId = null,
+  actorEmail = "",
+  actionType,
+  entityType,
+  entityId = "",
+  description,
+  metadata = null
+}) {
+  const executor = connection || pool;
+  await executor.execute(
+    `INSERT INTO audit_logs (
+      actor_user_id,
+      actor_email,
+      action_type,
+      entity_type,
+      entity_id,
+      description,
+      metadata_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      actorUserId || null,
+      actorEmail || null,
+      actionType,
+      entityType,
+      entityId || null,
+      description,
+      metadata ? JSON.stringify(metadata) : null
+    ]
+  );
+}
+
 async function ensureCorporateEmailRecord(connection, email) {
   let [corpRows] = await connection.execute(
     "SELECT id, active FROM corporate_emails WHERE email = ? LIMIT 1",
@@ -193,13 +251,15 @@ async function upsertOAuthUser({ email, provider, providerSubject }) {
 
     const corporateEmailId = await ensureCorporateEmailRecord(connection, email);
     const [existingByEmail] = await connection.execute(
-      "SELECT id, email FROM users WHERE email = ? LIMIT 1",
+      "SELECT id, email, role_name FROM users WHERE email = ? LIMIT 1",
       [email]
     );
 
     let userId;
+    let roleName;
     if (existingByEmail.length) {
       userId = Number(existingByEmail[0].id);
+      roleName = normalizeRole(existingByEmail[0].role_name);
       await connection.execute(
         `UPDATE users
          SET corporate_email_id = ?,
@@ -210,6 +270,7 @@ async function upsertOAuthUser({ email, provider, providerSubject }) {
         [corporateEmailId, provider, providerSubject, email, userId]
       );
     } else {
+      roleName = await decideUserRole(connection, email);
       const passwordHash = await createOauthPasswordPlaceholder();
       const [insertUser] = await connection.execute(
         `INSERT INTO users (
@@ -217,15 +278,29 @@ async function upsertOAuthUser({ email, provider, providerSubject }) {
           email,
           password_hash,
           auth_provider,
-          provider_subject
-        ) VALUES (?, ?, ?, ?, ?)`,
-        [corporateEmailId, email, passwordHash, provider, providerSubject]
+          provider_subject,
+          role_name
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        [corporateEmailId, email, passwordHash, provider, providerSubject, roleName]
       );
       userId = Number(insertUser.insertId);
     }
 
+    await writeAuditLog({
+      connection,
+      actorUserId: userId,
+      actorEmail: email,
+      actionType: existingByEmail.length ? "auth.google.login" : "auth.google.register",
+      entityType: "user",
+      entityId: String(userId),
+      description: existingByEmail.length
+        ? `Login com Google realizado por ${email}.`
+        : `Usuario ${email} criado via Google Login.`,
+      metadata: { provider, roleName }
+    });
+
     await connection.commit();
-    return { id: userId, email };
+    return { id: userId, email, role: roleName };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -244,7 +319,7 @@ async function authRequired(req, res, next) {
 
     const payload = jwt.verify(token, JWT_SECRET);
     const [rows] = await pool.execute(
-      `SELECT u.id, u.email, c.active
+      `SELECT u.id, u.email, u.role_name, c.active
        FROM users u
        JOIN corporate_emails c ON c.id = u.corporate_email_id
        WHERE u.id = ?
@@ -257,11 +332,19 @@ async function authRequired(req, res, next) {
       return;
     }
 
-    req.auth = { id: rows[0].id, email: rows[0].email, token };
+    req.auth = { id: rows[0].id, email: rows[0].email, role: normalizeRole(rows[0].role_name), token };
     next();
   } catch (error) {
     res.status(401).json({ message: "Sessao invalida." });
   }
+}
+
+function adminRequired(req, res, next) {
+  if (req.auth?.role !== "admin") {
+    res.status(403).json({ message: "Permissao de administrador necessaria." });
+    return;
+  }
+  next();
 }
 
 app.get("/api/health", async (_req, res) => {
@@ -323,16 +406,28 @@ app.post("/api/auth/register", async (req, res) => {
       return;
     }
 
+    const roleName = await decideUserRole(connection, email);
     const hash = await bcrypt.hash(password, 10);
     const [insertUser] = await connection.execute(
-      "INSERT INTO users (corporate_email_id, email, password_hash, auth_provider, provider_subject) VALUES (?, ?, ?, 'local', NULL)",
-      [corporateEmailId, email, hash]
+      "INSERT INTO users (corporate_email_id, email, password_hash, auth_provider, provider_subject, role_name) VALUES (?, ?, ?, 'local', NULL, ?)",
+      [corporateEmailId, email, hash, roleName]
     );
 
+    await writeAuditLog({
+      connection,
+      actorUserId: Number(insertUser.insertId),
+      actorEmail: email,
+      actionType: "auth.local.register",
+      entityType: "user",
+      entityId: String(insertUser.insertId),
+      description: `Usuario ${email} criado com autenticacao local.`,
+      metadata: { roleName }
+    });
+
     await connection.commit();
-    const user = { id: Number(insertUser.insertId), email };
+    const user = { id: Number(insertUser.insertId), email, role: roleName };
     const token = signAuthToken(user);
-    res.status(201).json({ token, user: { email: user.email } });
+    res.status(201).json({ token, user: { email: user.email, role: user.role } });
   } catch (error) {
     if (connection) {
       try {
@@ -385,7 +480,7 @@ app.post("/api/auth/login", async (req, res) => {
 
   try {
     const [rows] = await pool.execute(
-      `SELECT u.id, u.email, u.password_hash, c.active
+      `SELECT u.id, u.email, u.password_hash, u.role_name, c.active
        FROM users u
        JOIN corporate_emails c ON c.id = u.corporate_email_id
        WHERE u.email = ?
@@ -410,8 +505,18 @@ app.post("/api/auth/login", async (req, res) => {
       return;
     }
 
-    const token = signAuthToken({ id: Number(user.id), email: user.email });
-    res.json({ token, user: { email: user.email } });
+    await writeAuditLog({
+      actorUserId: Number(user.id),
+      actorEmail: user.email,
+      actionType: "auth.local.login",
+      entityType: "user",
+      entityId: String(user.id),
+      description: `Login local realizado por ${user.email}.`,
+      metadata: { roleName: normalizeRole(user.role_name) }
+    });
+
+    const token = signAuthToken({ id: Number(user.id), email: user.email, role: normalizeRole(user.role_name) });
+    res.json({ token, user: { email: user.email, role: normalizeRole(user.role_name) } });
   } catch (error) {
     console.error("AUTH_LOGIN_ERROR", error.code || "NO_CODE", error.message);
     if (error.code === "ER_NO_SUCH_TABLE") {
@@ -464,7 +569,7 @@ app.post("/api/auth/google", async (req, res) => {
     });
 
     const token = signAuthToken(user);
-    res.json({ token, user: { email: user.email } });
+    res.json({ token, user: { email: user.email, role: user.role } });
   } catch (error) {
     console.error("AUTH_GOOGLE_ERROR", error.code || "NO_CODE", error.message);
     if (error.message === "EMAIL_NOT_ALLOWED") {
@@ -480,7 +585,120 @@ app.post("/api/auth/google", async (req, res) => {
 });
 
 app.get("/api/auth/me", authRequired, async (req, res) => {
-  res.json({ user: { email: req.auth.email } });
+  res.json({ user: { email: req.auth.email, role: req.auth.role } });
+});
+
+app.get("/api/users", authRequired, adminRequired, async (_req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT u.id, u.email, u.role_name, u.auth_provider, u.created_at, c.active
+       FROM users u
+       JOIN corporate_emails c ON c.id = u.corporate_email_id
+       ORDER BY u.created_at DESC`
+    );
+
+    res.json({
+      users: rows.map((row) => ({
+        id: String(row.id),
+        email: row.email,
+        role: normalizeRole(row.role_name),
+        authProvider: row.auth_provider || "local",
+        active: !!row.active,
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Falha ao listar usuarios." });
+  }
+});
+
+app.put("/api/users/:id/role", authRequired, adminRequired, async (req, res) => {
+  const id = Number(req.params.id);
+  const roleName = normalizeRole(req.body?.role);
+
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ message: "ID invalido." });
+    return;
+  }
+
+  if (!["admin", "member"].includes(roleName)) {
+    res.status(400).json({ message: "Papel invalido." });
+    return;
+  }
+
+  try {
+    const [rows] = await pool.execute(
+      "SELECT id, email, role_name FROM users WHERE id = ? LIMIT 1",
+      [id]
+    );
+    if (!rows.length) {
+      res.status(404).json({ message: "Usuario nao encontrado." });
+      return;
+    }
+
+    if (normalizeRole(rows[0].role_name) === "admin" && roleName === "member") {
+      const [adminRows] = await pool.execute(
+        "SELECT COUNT(*) AS total FROM users WHERE role_name = 'admin'"
+      );
+      if (Number(adminRows[0]?.total || 0) <= 1) {
+        res.status(400).json({ message: "Nao e possivel remover o ultimo administrador." });
+        return;
+      }
+    }
+
+    await pool.execute("UPDATE users SET role_name = ? WHERE id = ?", [roleName, id]);
+    await writeAuditLog({
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: "user.role.update",
+      entityType: "user",
+      entityId: String(id),
+      description: `Papel do usuario ${rows[0].email} alterado para ${roleName}.`,
+      metadata: {
+        previousRole: normalizeRole(rows[0].role_name),
+        nextRole: roleName
+      }
+    });
+
+    res.json({
+      user: {
+        id: String(id),
+        email: rows[0].email,
+        role: roleName
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Falha ao atualizar permissao do usuario." });
+  }
+});
+
+app.get("/api/audit-logs", authRequired, async (_req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT id, actor_user_id, actor_email, action_type, entity_type, entity_id, description, metadata_json, created_at
+       FROM audit_logs
+       ORDER BY created_at DESC, id DESC
+       LIMIT 200`
+    );
+
+    res.json({
+      logs: rows.map((row) => ({
+        id: String(row.id),
+        actorUserId: row.actor_user_id ? String(row.actor_user_id) : "",
+        actorEmail: row.actor_email || "",
+        actionType: row.action_type,
+        entityType: row.entity_type,
+        entityId: row.entity_id || "",
+        description: row.description,
+        metadata: row.metadata_json && typeof row.metadata_json === "string"
+          ? JSON.parse(row.metadata_json)
+          : (row.metadata_json || null),
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Falha ao listar historico." });
+  }
 });
 
 app.get("/api/corporate-emails", authRequired, async (_req, res) => {
@@ -534,6 +752,15 @@ app.post("/api/corporate-emails", authRequired, async (req, res) => {
 
     if (existing.length && !existing[0].active) {
       await pool.execute("UPDATE corporate_emails SET active = 1 WHERE id = ?", [existing[0].id]);
+      await writeAuditLog({
+        actorUserId: req.auth.id,
+        actorEmail: req.auth.email,
+        actionType: "corporate-email.restore",
+        entityType: "corporate-email",
+        entityId: String(existing[0].id),
+        description: `Email corporativo ${email} reativado.`,
+        metadata: { email }
+      });
       res.status(201).json({ email: { id: String(existing[0].id), email, active: true, machineCount: 0, createdAt: new Date().toISOString() } });
       return;
     }
@@ -551,6 +778,15 @@ app.post("/api/corporate-emails", authRequired, async (req, res) => {
         machineCount: 0,
         createdAt: new Date().toISOString()
       }
+    });
+    await writeAuditLog({
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: "corporate-email.create",
+      entityType: "corporate-email",
+      entityId: String(insert.insertId),
+      description: `Email corporativo ${email} criado.`,
+      metadata: { email }
     });
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
@@ -589,6 +825,16 @@ app.delete("/api/corporate-emails/:id", authRequired, async (req, res) => {
     );
 
     await connection.execute("UPDATE corporate_emails SET active = 0 WHERE id = ?", [id]);
+    await writeAuditLog({
+      connection,
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: "corporate-email.delete",
+      entityType: "corporate-email",
+      entityId: String(id),
+      description: `Email corporativo ${rows[0].email} removido.`,
+      metadata: { email: rows[0].email }
+    });
     await connection.commit();
     res.json({ success: true });
   } catch (error) {
@@ -713,6 +959,15 @@ app.post("/api/computers", authRequired, async (req, res) => {
     );
 
     const created = await getComputerById(insert.insertId);
+    await writeAuditLog({
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: "computer.create",
+      entityType: "computer",
+      entityId: String(insert.insertId),
+      description: `Computador ${payload.serial} criado.`,
+      metadata: { serial: payload.serial, owner: payload.owner }
+    });
     res.status(201).json({ computer: created });
   } catch (error) {
     if (error.message === "EMAIL_NOT_ALLOWED") {
@@ -792,6 +1047,15 @@ app.put("/api/computers/:id", authRequired, async (req, res) => {
     }
 
     const updated = await getComputerById(id);
+    await writeAuditLog({
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: "computer.update",
+      entityType: "computer",
+      entityId: String(id),
+      description: `Computador ${payload.serial} atualizado.`,
+      metadata: { serial: payload.serial, owner: payload.owner }
+    });
     res.json({ computer: updated });
   } catch (error) {
     if (error.message === "EMAIL_NOT_ALLOWED") {
@@ -816,11 +1080,28 @@ app.delete("/api/computers/:id", authRequired, async (req, res) => {
   }
 
   try {
-    const [result] = await pool.execute("DELETE FROM computers WHERE id = ?", [id]);
-    if (!result.affectedRows) {
+    const [existingRows] = await pool.execute(
+      "SELECT serial_number, owner_name FROM computers WHERE id = ? LIMIT 1",
+      [id]
+    );
+    if (!existingRows.length) {
       res.status(404).json({ message: "Computador nao encontrado." });
       return;
     }
+
+    const [result] = await pool.execute("DELETE FROM computers WHERE id = ?", [id]);
+    await writeAuditLog({
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: "computer.delete",
+      entityType: "computer",
+      entityId: String(id),
+      description: `Computador ${existingRows[0].serial_number} removido.`,
+      metadata: {
+        serial: existingRows[0].serial_number,
+        owner: existingRows[0].owner_name
+      }
+    });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ message: "Falha ao remover computador." });
