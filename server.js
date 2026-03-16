@@ -12,6 +12,7 @@ const PORT = Number(process.env.API_PORT || process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret-in-production";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const DB_SSL = String(process.env.DB_SSL || "true").toLowerCase() === "true";
+const DB_AUTO_APPLY_SCHEMA = String(process.env.DB_AUTO_APPLY_SCHEMA || "true").toLowerCase() === "true";
 const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || "").trim();
 const GOOGLE_AUTH_ENABLED = Boolean(GOOGLE_CLIENT_ID);
 const CORPORATE_EMAIL_DOMAIN = String(process.env.CORPORATE_EMAIL_DOMAIN || "okta7.com.br")
@@ -76,6 +77,29 @@ const googleClient = GOOGLE_AUTH_ENABLED ? new OAuth2Client(GOOGLE_CLIENT_ID) : 
 const app = express();
 app.use(cors({ origin: buildCorsOrigin(), credentials: true }));
 app.use(express.json());
+
+async function applySchemaOnStartup() {
+  if (!DB_AUTO_APPLY_SCHEMA) return;
+
+  const schemaPath = path.join(__dirname, "mysql-schema.sql");
+  const sql = require("fs").readFileSync(schemaPath, "utf8");
+  const connection = await mysql.createConnection({
+    host: process.env.DB_HOST || databaseUrlConfig?.host,
+    port: Number(process.env.DB_PORT || databaseUrlConfig?.port || 3306),
+    database: process.env.DB_NAME || databaseUrlConfig?.database,
+    user: process.env.DB_USER || databaseUrlConfig?.user,
+    password: process.env.DB_PASS || databaseUrlConfig?.password,
+    ssl: DB_SSL ? { rejectUnauthorized: false } : undefined,
+    multipleStatements: true
+  });
+
+  try {
+    await connection.query(sql);
+    console.log("DB_SCHEMA_APPLIED");
+  } finally {
+    await connection.end();
+  }
+}
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -817,6 +841,13 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ message: "Erro interno inesperado." });
 });
 
-app.listen(PORT, () => {
-  console.log(`API rodando em http://localhost:${PORT}`);
-});
+applySchemaOnStartup()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`API rodando em http://localhost:${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error("DB_SCHEMA_STARTUP_ERROR", error.code || "NO_CODE", error.message);
+    process.exit(1);
+  });
