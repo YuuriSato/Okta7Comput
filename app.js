@@ -35,6 +35,8 @@ const elements = {
   metricExpired: document.getElementById("metric-expired"),
   commonSpecs: document.getElementById("common-specs"),
   importInput: document.getElementById("import-csv-input"),
+  importFeedback: document.getElementById("import-feedback"),
+  downloadCsvTemplate: document.getElementById("download-csv-template"),
   userEmail: document.getElementById("user-email"),
   themeToggle: document.getElementById("theme-toggle"),
   logoutButton: document.getElementById("logout-btn"),
@@ -150,6 +152,19 @@ function setMovementFeedback(message = "", kind = "ok") {
   elements.movementFeedback.className = kind === "error"
     ? "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
     : "rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700";
+}
+
+function setImportFeedback(message = "", kind = "ok") {
+  if (!message) {
+    elements.importFeedback.textContent = "";
+    elements.importFeedback.className = "mt-4 hidden rounded-lg border px-3 py-2 text-sm";
+    return;
+  }
+
+  elements.importFeedback.textContent = message;
+  elements.importFeedback.className = kind === "error"
+    ? "mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"
+    : "mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700";
 }
 
 function persistAuthSession(payload) {
@@ -806,46 +821,82 @@ async function deleteComputer(id) {
   render();
 }
 
+const CSV_COLUMNS = [
+  { key: "owner", header: "dono", required: true, aliases: ["owner"], example: "Maria Silva" },
+  { key: "corporateEmail", header: "email_corporativo", aliases: ["emailcorporativo", "corporateemail"], example: "maria@okta7.com.br" },
+  { key: "serial", header: "numero_serie", required: true, aliases: ["serial", "numerodeserie"], example: "SN-001" },
+  { key: "machine", header: "modelo", aliases: ["maquina", "machine", "maquinamodelo"], example: "Dell Latitude 5440" },
+  { key: "deviceStatus", header: "status", aliases: ["devicestatus"], example: "ativo" },
+  { key: "purchaseDate", header: "data_compra", aliases: ["datacompra", "datadecompra", "purchasedate"], example: "2026-03-16" },
+  { key: "warrantyMonths", header: "garantia_meses", aliases: ["garantiameses", "warrantymonths"], example: "12" },
+  { key: "cpu", header: "cpu", example: "Intel Core i7" },
+  { key: "ram", header: "ram", example: "16 GB" },
+  { key: "gpu", header: "gpu", example: "Intel Iris Xe" },
+  { key: "storage", header: "armazenamento", aliases: ["storage"], example: "512 GB" },
+  { key: "storageType", header: "tipo_armazenamento", aliases: ["storagetype", "tipodearmazenamento"], example: "SSD" },
+  { key: "os", header: "sistema_operacional", aliases: ["sistemaoperacional", "operatingsystem", "os"], example: "Windows 11 Pro" },
+  { key: "notes", header: "observacoes", aliases: ["notes"], example: "Notebook do comercial" },
+  { key: "warrantyDays", header: "garantia_dias", aliases: ["garantiadias", "warrantydays"], example: "360" },
+  { key: "specs", header: "specs", aliases: ["resumospecs"], example: "Intel Core i7 / 16 GB / 512 GB SSD / Windows 11 Pro" },
+  { key: "createdAt", header: "cadastro", aliases: ["createdat"], example: "2026-03-16 09:00:00" }
+];
+
+function normalizeCsvHeader(header) {
+  const normalized = String(header || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w]/g, "")
+    .toLowerCase();
+
+  const matched = CSV_COLUMNS.find((column) => {
+    const candidates = [column.header, ...(column.aliases || [])]
+      .map((value) => String(value).replace(/[^\w]/g, "").toLowerCase());
+    return candidates.includes(normalized);
+  });
+
+  return matched?.key || String(header || "").trim();
+}
+
+function csvValueForExport(column, computer) {
+  if (column.key === "deviceStatus") return computer.deviceStatus || "ativo";
+  if (column.key === "purchaseDate") return computer.purchaseDate || "";
+  if (column.key === "createdAt") return computer.createdAt ? new Date(computer.createdAt).toISOString() : "";
+  return computer[column.key];
+}
+
+function downloadCsv(content, filename) {
+  const blob = new Blob(["\uFEFF", content], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function downloadCsvTemplate() {
+  const delimiter = ";";
+  const toCsvCell = (value) => `"${String(value ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
+  const headerLine = CSV_COLUMNS.map((column) => toCsvCell(column.header)).join(delimiter);
+  const exampleLine = CSV_COLUMNS.map((column) => toCsvCell(column.example || "")).join(delimiter);
+  downloadCsv(["sep=;", headerLine, exampleLine].join("\r\n"), "modelo-importacao-computadores.csv");
+  setImportFeedback("Modelo CSV baixado com sucesso. Abra no Excel e preencha as colunas.", "ok");
+}
+
 function exportCsv() {
   const delimiter = ";";
-  const columns = [
-    { header: "Dono", key: "owner" },
-    { header: "Email Corporativo", key: "corporateEmail" },
-    { header: "Numero de Serie", key: "serial" },
-    { header: "Maquina/Modelo", key: "machine" },
-    { header: "Status", value: (c) => statusLabel(c.deviceStatus) },
-    { header: "Data de Compra", value: (c) => (c.purchaseDate ? formatDate(c.purchaseDate) : "") },
-    { header: "Garantia (meses)", key: "warrantyMonths" },
-    { header: "Processador (CPU)", key: "cpu" },
-    { header: "Memoria (RAM)", key: "ram" },
-    { header: "Placa de Video (GPU)", key: "gpu" },
-    { header: "Armazenamento", key: "storage" },
-    { header: "Tipo de Armazenamento", key: "storageType" },
-    { header: "Sistema Operacional", key: "os" },
-    { header: "Observacoes", key: "notes" },
-    { header: "Garantia (dias)", key: "warrantyDays" },
-    { header: "Resumo Specs", key: "specs" },
-    { header: "Cadastro", value: (c) => (c.createdAt ? new Date(c.createdAt).toLocaleString("pt-BR") : "") }
-  ];
-
   const toCsvCell = (value) => `"${String(value ?? "").replace(/"/g, '""').replace(/\r?\n/g, " ")}"`;
-  const headerLine = columns.map((col) => toCsvCell(col.header)).join(delimiter);
+  const headerLine = CSV_COLUMNS.map((column) => toCsvCell(column.header)).join(delimiter);
   const rows = state.computers.map((computer) =>
-    columns
-      .map((col) => {
-        const raw = typeof col.value === "function" ? col.value(computer) : computer[col.key];
+    CSV_COLUMNS
+      .map((column) => {
+        const raw = csvValueForExport(column, computer);
         return toCsvCell(raw);
       })
       .join(delimiter)
   );
 
-  const csv = ["sep=;", headerLine, ...rows].join("\r\n");
-  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "inventario-computadores.csv";
-  link.click();
-  URL.revokeObjectURL(link.href);
+  downloadCsv(["sep=;", headerLine, ...rows].join("\r\n"), "inventario-computadores.csv");
 }
 
 function importCsv(file) {
@@ -854,61 +905,19 @@ function importCsv(file) {
     const text = String(event.target?.result || "");
     const lines = text.split(/\r?\n/).filter(Boolean);
     if (lines.length < 2) {
-      window.alert("CSV sem dados validos.");
+      setImportFeedback("CSV sem dados validos.", "error");
       return;
     }
 
     const startIndex = lines[0].toLowerCase().startsWith("sep=") ? 1 : 0;
     const delimiter = lines[startIndex].includes(";") ? ";" : ",";
     const rawHeaders = parseCsvLine(lines[startIndex], delimiter).map((h) => h.replace(/(^"|"$)/g, "").trim());
-    const normalizeHeader = (header) => {
-      const key = header
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^\w]/g, "")
-        .toLowerCase();
-      const map = {
-        dono: "owner",
-        owner: "owner",
-        emailcorporativo: "corporateEmail",
-        corporateemail: "corporateEmail",
-        numerodeserie: "serial",
-        serial: "serial",
-        maquinamodelo: "machine",
-        machine: "machine",
-        status: "deviceStatus",
-        devicestatus: "deviceStatus",
-        datadecompra: "purchaseDate",
-        purchasedate: "purchaseDate",
-        garantiameses: "warrantyMonths",
-        warrantymonths: "warrantyMonths",
-        processadorcpu: "cpu",
-        cpu: "cpu",
-        memoriaram: "ram",
-        ram: "ram",
-        placadevideogpu: "gpu",
-        gpu: "gpu",
-        armazenamento: "storage",
-        storagetype: "storageType",
-        tipodearmazenamento: "storageType",
-        sistemaoperacional: "os",
-        os: "os",
-        observacoes: "notes",
-        notes: "notes",
-        garantiadias: "warrantyDays",
-        warrantydays: "warrantyDays",
-        resumospecs: "specs",
-        specs: "specs",
-        cadastro: "createdAt",
-        createdat: "createdAt"
-      };
-      return map[key] || header;
-    };
-    const headers = rawHeaders.map(normalizeHeader);
-    const required = ["owner", "serial"];
+    const headers = rawHeaders.map(normalizeCsvHeader);
+    const required = CSV_COLUMNS.filter((column) => column.required).map((column) => column.key);
     const missing = required.filter((key) => !headers.includes(key));
     if (missing.length) {
-      window.alert(`CSV invalido. Campos obrigatorios ausentes: ${missing.join(", ")}`);
+      const expected = CSV_COLUMNS.filter((column) => missing.includes(column.key)).map((column) => column.header);
+      setImportFeedback(`CSV invalido. Campos obrigatorios ausentes: ${expected.join(", ")}.`, "error");
       return;
     }
 
@@ -943,12 +952,12 @@ function importCsv(file) {
       .filter((item) => item.owner && item.serial);
 
     if (!imported.length) {
-      window.alert("Nenhuma linha valida encontrada para importar.");
+      setImportFeedback("Nenhuma linha valida encontrada para importar.", "error");
       return;
     }
 
     if (!state.auth.token) {
-      window.alert("Sessao invalida. Faca login novamente.");
+      setImportFeedback("Sessao invalida. Faca login novamente.", "error");
       return;
     }
 
@@ -966,10 +975,10 @@ function importCsv(file) {
     await refreshInventoryData();
     render();
     if (failCount > 0) {
-      window.alert(`${successCount} computador(es) importado(s) e ${failCount} linha(s) falharam.`);
+      setImportFeedback(`${successCount} computador(es) importado(s) e ${failCount} linha(s) falharam. Revise os headers e emails corporativos do arquivo.`, "error");
       return;
     }
-    window.alert(`${successCount} computador(es) importado(s) com sucesso.`);
+    setImportFeedback(`${successCount} computador(es) importado(s) com sucesso a partir de ${file.name}.`, "ok");
   };
   reader.readAsText(file, "utf-8");
 }
@@ -1772,6 +1781,7 @@ async function logout() {
   setAuthError("");
   setPermissionsFeedback("");
   setMovementFeedback("");
+  setImportFeedback("");
   render();
 }
 
@@ -1783,6 +1793,7 @@ function bindEvents() {
       setCorporateFeedback("");
       setMovementFeedback("");
       setPermissionsFeedback("");
+      setImportFeedback("");
       render();
     });
   });
@@ -1922,8 +1933,14 @@ function bindEvents() {
     if (!state.auth.isAuthenticated) return;
     const file = event.target.files?.[0];
     if (!file) return;
+    setImportFeedback(`Importando ${file.name}...`, "ok");
     importCsv(file);
     event.target.value = "";
+  });
+
+  elements.downloadCsvTemplate.addEventListener("click", () => {
+    if (!state.auth.isAuthenticated) return;
+    downloadCsvTemplate();
   });
 
   elements.authTabLogin.addEventListener("click", () => setAuthMode("login"));

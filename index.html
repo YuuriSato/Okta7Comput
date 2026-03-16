@@ -117,11 +117,41 @@
             <div class="flex flex-wrap gap-3">
               <button id="export-pdf" class="rounded-xl border border-fuchsia-300 bg-fuchsia-50 px-4 py-2.5 text-sm font-semibold text-fuchsia-700 hover:bg-fuchsia-100">Exportar PDF</button>
               <button id="export-csv" class="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">Exportar</button>
-              <label for="import-csv-input" class="cursor-pointer rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100">Importar CSV</label>
-              <input id="import-csv-input" type="file" accept=".csv,text/csv" class="hidden" />
               <button id="new-from-table" class="rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-soft hover:bg-brand-600">+ Novo Computador</button>
             </div>
           </header>
+
+          <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div class="max-w-3xl">
+                <h2 class="text-2xl font-bold">Importação CSV / Excel</h2>
+                <p class="mt-1 text-slate-600">Importe planilhas salvas como CSV usando headers claros. Os campos obrigatórios são <span class="font-semibold text-slate-900">dono</span> e <span class="font-semibold text-slate-900">numero_serie</span>.</p>
+                <div class="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">dono</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">email_corporativo</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">numero_serie</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">modelo</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">status</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">data_compra</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">garantia_meses</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">cpu</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">ram</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">gpu</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">armazenamento</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">tipo_armazenamento</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">sistema_operacional</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">observacoes</span>
+                  <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">specs</span>
+                </div>
+              </div>
+              <div class="flex flex-col gap-3 lg:min-w-[260px]">
+                <button id="download-csv-template" class="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Baixar Modelo CSV</button>
+                <label for="import-csv-input" class="cursor-pointer rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-center text-sm font-semibold text-blue-700 hover:bg-blue-100">Selecionar Arquivo CSV</label>
+                <input id="import-csv-input" type="file" accept=".csv,text/csv" class="hidden" />
+              </div>
+            </div>
+            <p id="import-feedback" class="mt-4 hidden rounded-lg border px-3 py-2 text-sm"></p>
+          </section>
 
           <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
             <h2 class="text-2xl font-bold">Filtros</h2>
