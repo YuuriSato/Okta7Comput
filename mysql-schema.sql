@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   corporate_email_id BIGINT UNSIGNED NOT NULL,
   email VARCHAR(255) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
+  auth_provider VARCHAR(32) NOT NULL DEFAULT 'local',
+  provider_subject VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_users_email (email),
@@ -56,6 +58,20 @@ CREATE TABLE IF NOT EXISTS computers (
 -- (sem usar IF NOT EXISTS no ALTER, para compatibilidade ampla)
 
 SET @db := DATABASE();
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'auth_provider'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE users ADD COLUMN auth_provider VARCHAR(32) NOT NULL DEFAULT ''local''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'provider_subject'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE users ADD COLUMN provider_subject VARCHAR(255) NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (
   SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS

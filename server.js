@@ -4,6 +4,7 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const mysql = require("mysql2/promise");
+const { OAuth2Client } = require("google-auth-library");
 
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 
@@ -11,6 +12,8 @@ const PORT = Number(process.env.API_PORT || process.env.PORT || 3000);
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret-in-production";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 const DB_SSL = String(process.env.DB_SSL || "true").toLowerCase() === "true";
+const GOOGLE_CLIENT_ID = String(process.env.GOOGLE_CLIENT_ID || "").trim();
+const GOOGLE_AUTH_ENABLED = Boolean(GOOGLE_CLIENT_ID);
 const CORPORATE_EMAIL_DOMAIN = String(process.env.CORPORATE_EMAIL_DOMAIN || "okta7.com.br")
   .trim()
   .toLowerCase();
@@ -68,6 +71,8 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
+const googleClient = GOOGLE_AUTH_ENABLED ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
+
 const app = express();
 app.use(cors({ origin: buildCorsOrigin(), credentials: true }));
 app.use(express.json());
@@ -83,6 +88,10 @@ function ensureCorporateEmailDomain(email) {
 
 function signAuthToken(user) {
   return jwt.sign({ sub: user.id, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+}
+
+function createOauthPasswordPlaceholder() {
+  return bcrypt.hash(`oauth:${Date.now()}:${Math.random().toString(36).slice(2)}`, 10);
 }
 
 function extractBearerToken(req) {
@@ -127,6 +136,80 @@ async function getComputerById(id) {
   return mapComputerRow(rows[0]);
 }
 
+async function ensureCorporateEmailRecord(connection, email) {
+  let [corpRows] = await connection.execute(
+    "SELECT id, active FROM corporate_emails WHERE email = ? LIMIT 1",
+    [email]
+  );
+
+  if (!corpRows.length) {
+    if (AUTH_REQUIRE_PREAUTHORIZED_EMAIL) {
+      throw new Error("EMAIL_NOT_ALLOWED");
+    }
+
+    const [insertCorp] = await connection.execute(
+      "INSERT INTO corporate_emails (email, active) VALUES (?, 1)",
+      [email]
+    );
+    corpRows = [{ id: insertCorp.insertId, active: 1 }];
+  }
+
+  if (!corpRows[0].active) {
+    throw new Error("EMAIL_DISABLED");
+  }
+
+  return Number(corpRows[0].id);
+}
+
+async function upsertOAuthUser({ email, provider, providerSubject }) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const corporateEmailId = await ensureCorporateEmailRecord(connection, email);
+    const [existingByEmail] = await connection.execute(
+      "SELECT id, email FROM users WHERE email = ? LIMIT 1",
+      [email]
+    );
+
+    let userId;
+    if (existingByEmail.length) {
+      userId = Number(existingByEmail[0].id);
+      await connection.execute(
+        `UPDATE users
+         SET corporate_email_id = ?,
+             auth_provider = ?,
+             provider_subject = ?,
+             email = ?
+         WHERE id = ?`,
+        [corporateEmailId, provider, providerSubject, email, userId]
+      );
+    } else {
+      const passwordHash = await createOauthPasswordPlaceholder();
+      const [insertUser] = await connection.execute(
+        `INSERT INTO users (
+          corporate_email_id,
+          email,
+          password_hash,
+          auth_provider,
+          provider_subject
+        ) VALUES (?, ?, ?, ?, ?)`,
+        [corporateEmailId, email, passwordHash, provider, providerSubject]
+      );
+      userId = Number(insertUser.insertId);
+    }
+
+    await connection.commit();
+    return { id: userId, email };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 async function authRequired(req, res, next) {
   try {
     const token = extractBearerToken(req);
@@ -166,8 +249,21 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
+app.get("/api/auth/config", (_req, res) => {
+  res.json({
+    provider: GOOGLE_AUTH_ENABLED ? "google" : "local",
+    googleClientId: GOOGLE_AUTH_ENABLED ? GOOGLE_CLIENT_ID : "",
+    corporateEmailDomain: CORPORATE_EMAIL_DOMAIN
+  });
+});
+
 app.options("/api/auth/register", cors());
 app.post("/api/auth/register", async (req, res) => {
+  if (GOOGLE_AUTH_ENABLED) {
+    res.status(405).json({ message: "Use o login com Google." });
+    return;
+  }
+
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || "");
 
@@ -196,35 +292,17 @@ app.post("/api/auth/register", async (req, res) => {
       return;
     }
 
-    let [corpRows] = await connection.execute(
-      "SELECT id, active FROM corporate_emails WHERE email = ? LIMIT 1",
-      [email]
-    );
-
-    if (!corpRows.length) {
-      if (AUTH_REQUIRE_PREAUTHORIZED_EMAIL) {
-        await connection.rollback();
-        res.status(403).json({ message: "Email corporativo nao autorizado." });
-        return;
-      }
-
-      const [insertCorp] = await connection.execute(
-        "INSERT INTO corporate_emails (email, active) VALUES (?, 1)",
-        [email]
-      );
-      corpRows = [{ id: insertCorp.insertId, active: 1 }];
-    }
-
-    if (!corpRows[0].active) {
+    const corporateEmailId = await ensureCorporateEmailRecord(connection, email);
+    if (!corporateEmailId) {
       await connection.rollback();
-      res.status(403).json({ message: "Email corporativo desativado." });
+      res.status(403).json({ message: "Email corporativo nao autorizado." });
       return;
     }
 
     const hash = await bcrypt.hash(password, 10);
     const [insertUser] = await connection.execute(
-      "INSERT INTO users (corporate_email_id, email, password_hash) VALUES (?, ?, ?)",
-      [corpRows[0].id, email, hash]
+      "INSERT INTO users (corporate_email_id, email, password_hash, auth_provider, provider_subject) VALUES (?, ?, ?, 'local', NULL)",
+      [corporateEmailId, email, hash]
     );
 
     await connection.commit();
@@ -240,6 +318,14 @@ app.post("/api/auth/register", async (req, res) => {
     console.error("AUTH_REGISTER_ERROR", error.code || "NO_CODE", error.message);
     if (error.code === "ER_DUP_ENTRY") {
       res.status(409).json({ message: "Email ja cadastrado." });
+      return;
+    }
+    if (error.message === "EMAIL_NOT_ALLOWED") {
+      res.status(403).json({ message: "Email corporativo nao autorizado." });
+      return;
+    }
+    if (error.message === "EMAIL_DISABLED") {
+      res.status(403).json({ message: "Email corporativo desativado." });
       return;
     }
     if (error.code === "ER_NO_SUCH_TABLE") {
@@ -260,6 +346,11 @@ app.post("/api/auth/register", async (req, res) => {
 
 app.options("/api/auth/login", cors());
 app.post("/api/auth/login", async (req, res) => {
+  if (GOOGLE_AUTH_ENABLED) {
+    res.status(405).json({ message: "Use o login com Google." });
+    return;
+  }
+
   const email = normalizeEmail(req.body?.email);
   const password = String(req.body?.password || "");
 
@@ -308,6 +399,64 @@ app.post("/api/auth/login", async (req, res) => {
       return;
     }
     res.status(500).json({ message: "Erro interno ao autenticar." });
+  }
+});
+
+app.options("/api/auth/google", cors());
+app.post("/api/auth/google", async (req, res) => {
+  if (!GOOGLE_AUTH_ENABLED || !googleClient) {
+    res.status(503).json({ message: "Login com Google nao configurado." });
+    return;
+  }
+
+  const credential = String(req.body?.credential || "").trim();
+  if (!credential) {
+    res.status(400).json({ message: "Credencial do Google ausente." });
+    return;
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: GOOGLE_CLIENT_ID
+    });
+
+    const payload = ticket.getPayload();
+    const email = normalizeEmail(payload?.email);
+    const providerSubject = String(payload?.sub || "").trim();
+
+    if (!payload || !email || !providerSubject) {
+      res.status(401).json({ message: "Token do Google invalido." });
+      return;
+    }
+    if (!payload.email_verified) {
+      res.status(403).json({ message: "Conta Google sem email verificado." });
+      return;
+    }
+    if (!ensureCorporateEmailDomain(email)) {
+      res.status(403).json({ message: `Use uma conta Google corporativa @${CORPORATE_EMAIL_DOMAIN}.` });
+      return;
+    }
+
+    const user = await upsertOAuthUser({
+      email,
+      provider: "google",
+      providerSubject
+    });
+
+    const token = signAuthToken(user);
+    res.json({ token, user: { email: user.email } });
+  } catch (error) {
+    console.error("AUTH_GOOGLE_ERROR", error.code || "NO_CODE", error.message);
+    if (error.message === "EMAIL_NOT_ALLOWED") {
+      res.status(403).json({ message: "Email corporativo nao autorizado." });
+      return;
+    }
+    if (error.message === "EMAIL_DISABLED") {
+      res.status(403).json({ message: "Email corporativo desativado." });
+      return;
+    }
+    res.status(401).json({ message: "Falha ao autenticar com Google." });
   }
 });
 

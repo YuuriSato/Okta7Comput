@@ -34,10 +34,15 @@ const elements = {
   userEmail: document.getElementById("user-email"),
   themeToggle: document.getElementById("theme-toggle"),
   logoutButton: document.getElementById("logout-btn"),
+  authTabs: document.getElementById("auth-tabs"),
+  authSubtitle: document.getElementById("auth-subtitle"),
   authLayer: document.getElementById("auth-modal-layer"),
   authTabLogin: document.getElementById("tab-login"),
   authTabRegister: document.getElementById("tab-register"),
   authError: document.getElementById("auth-error"),
+  oauthAuthSection: document.getElementById("oauth-auth-section"),
+  oauthAuthCopy: document.getElementById("oauth-auth-copy"),
+  googleSigninButton: document.getElementById("google-signin-button"),
   loginForm: document.getElementById("login-form"),
   registerForm: document.getElementById("register-form"),
   corporateEmailForm: document.getElementById("corporate-email-form"),
@@ -62,7 +67,11 @@ const state = {
     isAuthenticated: false,
     loading: false,
     error: "",
-    mode: "login"
+    mode: "login",
+    provider: "local",
+    googleClientId: "",
+    googleInitialized: false,
+    corporateEmailDomain: ""
   }
 };
 
@@ -134,24 +143,44 @@ function setAuthError(message) {
 function setAuthMode(mode) {
   state.auth.mode = mode;
   setAuthError("");
+  const isLocalAuth = state.auth.provider === "local";
+  elements.authTabs.classList.toggle("hidden", !isLocalAuth);
+  elements.loginForm.classList.toggle("hidden", !isLocalAuth || mode !== "login");
+  elements.registerForm.classList.toggle("hidden", !isLocalAuth || mode !== "register");
+  elements.oauthAuthSection.classList.toggle("hidden", state.auth.provider !== "google");
+
+  if (state.auth.provider === "google") {
+    const domainCopy = state.auth.corporateEmailDomain
+      ? `Use sua conta Google corporativa @${state.auth.corporateEmailDomain} para entrar.`
+      : "Use sua conta Google corporativa para entrar.";
+    elements.authSubtitle.textContent = "Entre com sua conta Google para acessar o inventario.";
+    elements.oauthAuthCopy.textContent = domainCopy;
+    return;
+  }
+
+  elements.authSubtitle.textContent = "Entre para gerenciar os computadores.";
   elements.authTabLogin.classList.toggle("bg-white", mode === "login");
   elements.authTabLogin.classList.toggle("text-brand-600", mode === "login");
   elements.authTabRegister.classList.toggle("bg-white", mode === "register");
   elements.authTabRegister.classList.toggle("text-brand-600", mode === "register");
-  elements.loginForm.classList.toggle("hidden", mode !== "login");
-  elements.registerForm.classList.toggle("hidden", mode !== "register");
 }
 
 function setAuthLoading(isLoading) {
   state.auth.loading = isLoading;
-  const loginButton = elements.loginForm.querySelector("button[type='submit']");
-  const registerButton = elements.registerForm.querySelector("button[type='submit']");
-  loginButton.disabled = isLoading;
-  registerButton.disabled = isLoading;
-  loginButton.classList.toggle("opacity-70", isLoading);
-  registerButton.classList.toggle("opacity-70", isLoading);
-  loginButton.textContent = isLoading ? "Aguarde..." : "Entrar";
-  registerButton.textContent = isLoading ? "Aguarde..." : "Cadastrar e Entrar";
+  if (state.auth.provider === "local") {
+    const loginButton = elements.loginForm.querySelector("button[type='submit']");
+    const registerButton = elements.registerForm.querySelector("button[type='submit']");
+    loginButton.disabled = isLoading;
+    registerButton.disabled = isLoading;
+    loginButton.classList.toggle("opacity-70", isLoading);
+    registerButton.classList.toggle("opacity-70", isLoading);
+    loginButton.textContent = isLoading ? "Aguarde..." : "Entrar";
+    registerButton.textContent = isLoading ? "Aguarde..." : "Cadastrar e Entrar";
+    return;
+  }
+
+  elements.oauthAuthSection.classList.toggle("opacity-70", isLoading);
+  elements.oauthAuthSection.classList.toggle("pointer-events-none", isLoading);
 }
 
 function applyAuthGate() {
@@ -397,6 +426,7 @@ function render() {
   renderTable();
   renderCorporateEmails();
   applyAuthGate();
+  renderGoogleAuth();
 }
 
 function openModal(computer = null) {
@@ -1000,6 +1030,22 @@ async function apiRequest({ url, method = "GET", body, token }) {
   }
 }
 
+async function loadAuthConfig() {
+  const result = await apiRequest({
+    url: `${AUTH_BASE_URL}/config`,
+    method: "GET"
+  });
+
+  if (!result.ok) {
+    throw new Error(result.message || "Falha ao carregar configuracao de autenticacao.");
+  }
+
+  const provider = result.data?.provider === "google" ? "google" : "local";
+  state.auth.provider = provider;
+  state.auth.googleClientId = provider === "google" ? String(result.data?.googleClientId || "") : "";
+  state.auth.corporateEmailDomain = String(result.data?.corporateEmailDomain || "");
+}
+
 function canUseMockFallback(result) {
   if (!AUTH_USE_MOCK) return false;
   if (result.networkError) return true;
@@ -1046,6 +1092,15 @@ const authService = {
       return;
     }
     await mockAuthService.logout();
+  },
+  async googleLogin(credential) {
+    const apiResult = await apiRequest({
+      url: `${AUTH_BASE_URL}/google`,
+      method: "POST",
+      body: { credential }
+    });
+    if (apiResult.ok) return normalizeAuthPayload(apiResult.data);
+    throw new Error(apiResult.message || "Falha ao autenticar com Google.");
   }
 };
 
@@ -1064,6 +1119,66 @@ function normalizeMePayload(data) {
     throw new Error("Sessao invalida.");
   }
   return { user: { email: data.user.email } };
+}
+
+async function handleGoogleCredentialResponse(response) {
+  const credential = String(response?.credential || "").trim();
+  if (!credential) {
+    setAuthError("Nao foi possivel receber a credencial do Google.");
+    return;
+  }
+
+  setAuthError("");
+  setAuthLoading(true);
+  try {
+    const result = await authService.googleLogin(credential);
+    persistAuthSession(result);
+    await refreshInventoryData();
+    render();
+  } catch (error) {
+    clearAuthSession();
+    setAuthError(error.message || "Falha ao autenticar com Google.");
+  } finally {
+    setAuthLoading(false);
+    render();
+  }
+}
+
+function renderGoogleAuth() {
+  if (state.auth.provider !== "google") return;
+  if (state.auth.isAuthenticated) return;
+  if (!state.auth.googleClientId) {
+    setAuthError("Google Login nao configurado no servidor.");
+    return;
+  }
+  if (!window.google?.accounts?.id) {
+    window.setTimeout(() => {
+      if (!state.auth.isAuthenticated) {
+        renderGoogleAuth();
+      }
+    }, 400);
+    return;
+  }
+  if (state.auth.googleInitialized) return;
+
+  window.google.accounts.id.initialize({
+    client_id: state.auth.googleClientId,
+    callback: handleGoogleCredentialResponse,
+    auto_select: false,
+    cancel_on_tap_outside: true
+  });
+
+  elements.googleSigninButton.innerHTML = "";
+  window.google.accounts.id.renderButton(elements.googleSigninButton, {
+    type: "standard",
+    theme: "outline",
+    size: "large",
+    text: "signin_with",
+    shape: "pill",
+    width: 320
+  });
+
+  state.auth.googleInitialized = true;
 }
 
 const inventoryService = {
@@ -1228,6 +1343,9 @@ async function submitAuth(mode, formElement) {
 
 async function logout() {
   await authService.logout();
+  if (window.google?.accounts?.id) {
+    window.google.accounts.id.disableAutoSelect();
+  }
   clearAuthSession();
   state.computers = [];
   state.corporateEmails = [];
@@ -1366,6 +1484,11 @@ function bindEvents() {
 
 async function bootstrap() {
   applyTheme();
+  try {
+    await loadAuthConfig();
+  } catch (error) {
+    setAuthError(error.message || "Falha ao carregar autenticacao.");
+  }
   bindEvents();
   setAuthMode("login");
   await validateExistingSession();

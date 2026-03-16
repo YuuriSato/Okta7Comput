@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gestão de Computadores</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="./tailwind-config.js"></script>
     <script>window.APP_CONFIG = { AUTH_USE_MOCK: false };</script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231d4ed8'/%3E%3Ctext x='50%25' y='54%25' font-size='24' text-anchor='middle' fill='white' font-family='Arial'%3EO7%3C/text%3E%3C/svg%3E" />
@@ -193,15 +194,21 @@
       <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200">
         <div class="mb-6">
           <h2 class="text-2xl font-bold">Acesso ao Sistema</h2>
-          <p class="mt-1 text-sm text-slate-600">Entre ou crie sua conta para gerenciar os computadores.</p>
+          <p id="auth-subtitle" class="mt-1 text-sm text-slate-600">Entre para gerenciar os computadores.</p>
         </div>
 
-        <div class="mb-5 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+        <div id="auth-tabs" class="mb-5 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
           <button id="tab-login" class="rounded-lg px-3 py-2 text-sm font-semibold">Entrar</button>
           <button id="tab-register" class="rounded-lg px-3 py-2 text-sm font-semibold">Cadastrar</button>
         </div>
 
         <p id="auth-error" class="mb-4 hidden rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"></p>
+
+        <section id="oauth-auth-section" class="hidden space-y-4">
+          <p id="oauth-auth-copy" class="text-sm text-slate-600">Use sua conta Google corporativa para entrar.</p>
+          <div id="google-signin-button" class="flex justify-center"></div>
+          <p class="text-center text-xs text-slate-500">Somente contas do dominio corporativo sao aceitas.</p>
+        </section>
 
         <form id="login-form" class="space-y-4">
           <label class="block text-sm font-medium text-slate-700">
