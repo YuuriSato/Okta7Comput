@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body class="min-h-screen bg-slate-100 text-slate-900">
+    <!-- Estrutura principal: menu lateral persistente e area onde as views sao alternadas. -->
     <div id="app-shell" class="min-h-screen lg:flex">
       <aside class="w-full border-b border-slate-200 bg-white lg:flex lg:min-h-screen lg:w-72 lg:flex-col lg:border-b-0 lg:border-r">
         <div class="px-6 py-6 border-b border-slate-200">
@@ -79,6 +80,7 @@
             </div>
           </header>
 
+          <!-- Cards de resumo com os indicadores principais do inventario. -->
           <div class="grid grid-cols-1 gap-4 xl:grid-cols-4">
             <article class="rounded-2xl border-l-4 border-l-blue-500 bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-1 hover:shadow-lg">
               <p class="text-sm font-semibold text-slate-600">Total de Computadores</p>
@@ -99,12 +101,13 @@
               <p class="text-sm font-semibold text-slate-600">Garantias Vencidas</p>
               <p id="metric-expired" class="mt-5 text-5xl font-extrabold text-rose-600">0</p>
               <p class="mt-2 text-sm text-slate-500">Sem cobertura</p>
-            </article>
+              </article>
           </div>
 
-          <div class="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <!-- Area analitica do dashboard: grafico de status ao lado do ranking de configuracoes mais comuns. -->
+          <div class="grid grid-cols-1 gap-6 xl:grid-cols-[420px_minmax(0,1fr)] 2xl:grid-cols-[460px_minmax(0,1fr)]">
             <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
-              <h3 class="text-2xl font-bold">Status dos Equipamentos</h3>
+              <h3 class="text-xl font-bold xl:text-2xl">Status dos Equipamentos</h3>
               <p class="mt-1 text-slate-500">Distribuição atual do parque por status do dispositivo</p>
               <div id="device-status-chart" class="mt-6"></div>
             </section>
@@ -131,6 +134,7 @@
           </header>
 
           <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
+            <!-- Layout da importacao: guia visual dos campos suportados + acoes laterais de template/upload. -->
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div class="max-w-3xl">
                 <h2 class="text-2xl font-bold">Importação CSV / Excel</h2>
@@ -268,6 +272,7 @@
             <p class="mt-1 text-lg text-slate-600">Registre devoluções para estoque e trocas de responsável diretamente pelo sistema</p>
           </header>
 
+          <!-- Bloco principal da view: formulario de movimentacao na esquerda e historico operacional na direita. -->
           <section class="grid grid-cols-1 gap-6 xl:grid-cols-3">
             <article class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md xl:col-span-1">
               <div class="flex items-center justify-between gap-4">
@@ -298,6 +303,7 @@
                   </div>
                 </div>
 
+                <!-- Campos de destino mantidos juntos porque parte deles muda conforme o tipo de movimentacao. -->
                 <div id="movement-target-fields" class="grid grid-cols-1 gap-4">
                   <label class="block text-sm font-medium text-slate-700">
                     Novo responsável
@@ -422,6 +428,7 @@
       </svg>
     </button>
 
+    <!-- Camada de bloqueio da aplicacao: login/cadastro ficam acima do restante enquanto nao ha sessao valida. -->
     <div id="auth-modal-layer" class="fixed inset-0 z-[70] hidden items-center justify-center bg-slate-900/55 p-4">
       <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200">
         <div class="mb-6">
@@ -468,6 +475,7 @@
       </div>
     </div>
 
+    <!-- Modal principal de cadastro/edicao, com o formulario separado por grupos de informacao. -->
     <div id="modal-layer" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/45 p-4">
       <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl max-h-[92vh] overflow-y-auto">
         <div class="flex items-center justify-between">
@@ -481,6 +489,22 @@
         <p class="mt-2 text-lg text-slate-500">Preencha os dados do computador para adicioná-lo ao inventário</p>
 
         <form id="computer-form" class="mt-6 space-y-6">
+          <section id="computer-template-section" class="rounded-2xl border border-dashed border-brand-200 bg-brand-50/40 p-4">
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_minmax(260px,360px)] md:items-end">
+              <div>
+                <h4 class="text-lg font-bold text-slate-900">Copiar de um cadastro existente</h4>
+                <p id="computer-template-help" class="mt-1 text-sm text-slate-600">Selecione um computador já cadastrado para reaproveitar as informações e trocar apenas o número de série.</p>
+              </div>
+              <label class="space-y-1 text-sm block">
+                <span class="font-semibold text-slate-700">Modelo base</span>
+                <select id="computer-template-select" class="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100">
+                  <option value="">Preencher manualmente</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <!-- Dados operacionais do equipamento e do responsavel atual. -->
           <section class="space-y-4">
             <h4 class="text-2xl font-bold">Informações Gerais</h4>
             <label class="space-y-1 text-sm block">
@@ -531,6 +555,7 @@
 
           <hr class="border-slate-200" />
 
+          <!-- Especificacoes tecnicas agrupadas para manter a leitura do formulario mais previsivel. -->
           <section class="space-y-4">
             <h4 class="text-2xl font-bold">Especificações Técnicas</h4>
             <label class="space-y-1 text-sm block">
@@ -570,6 +595,7 @@
 
           <hr class="border-slate-200" />
 
+          <!-- Campo livre isolado para nao competir visualmente com os dados estruturados acima. -->
           <section class="space-y-4">
             <h4 class="text-2xl font-bold">Observações</h4>
             <label class="space-y-1 text-sm block">

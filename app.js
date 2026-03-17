@@ -26,6 +26,9 @@ const elements = {
   modalLayer: document.getElementById("modal-layer"),
   modalTitle: document.getElementById("modal-title"),
   form: document.getElementById("computer-form"),
+  computerTemplateSection: document.getElementById("computer-template-section"),
+  computerTemplateHelp: document.getElementById("computer-template-help"),
+  computerTemplateSelect: document.getElementById("computer-template-select"),
   tableBody: document.getElementById("table-body"),
   tableCount: document.getElementById("table-count"),
   filterSearch: document.getElementById("filter-search"),
@@ -333,6 +336,31 @@ function renderCorporateEmailOptions(selectedEmail = "") {
   elements.computerCorporateEmail.innerHTML = options.join("");
 }
 
+function renderComputerTemplateOptions(selectedId = "") {
+  const options = ['<option value="">Preencher manualmente</option>'];
+  const templates = [...state.computers].sort((a, b) => {
+    const machineCompare = String(a.machine || "").localeCompare(String(b.machine || ""), "pt-BR");
+    if (machineCompare !== 0) return machineCompare;
+    return String(a.serial || "").localeCompare(String(b.serial || ""), "pt-BR");
+  });
+
+  templates.forEach((computer) => {
+    const selected = computer.id === selectedId ? "selected" : "";
+    const model = computer.machine || "Modelo sem nome";
+    const owner = computer.owner || "Sem responsável";
+    options.push(
+      `<option value="${escapeHtml(computer.id)}" ${selected}>${escapeHtml(model)} - ${escapeHtml(computer.serial || "Sem série")} - ${escapeHtml(owner)}</option>`
+    );
+  });
+
+  const hasTemplates = templates.length > 0;
+  elements.computerTemplateSelect.innerHTML = options.join("");
+  elements.computerTemplateSelect.disabled = !hasTemplates;
+  elements.computerTemplateHelp.textContent = hasTemplates
+    ? "Selecione um computador já cadastrado para reaproveitar as informações e trocar apenas o número de série."
+    : "Cadastre o primeiro computador manualmente para liberar a cópia de informações nos próximos cadastros.";
+}
+
 function renderMovementComputerOptions(selectedId = "") {
   const options = ['<option value="">Selecione um computador</option>'];
   state.computers.forEach((computer) => {
@@ -484,30 +512,45 @@ function renderDashboard() {
       .join("");
 
     elements.deviceStatusChart.innerHTML = `
-      <div class="flex flex-col items-center gap-6 lg:flex-row lg:items-center">
-        <div class="relative flex h-[180px] w-[180px] items-center justify-center">
-          <svg viewBox="0 0 180 180" class="h-[180px] w-[180px]">
-            <circle cx="90" cy="90" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="18"></circle>
-            ${segments}
-          </svg>
-          <div class="absolute text-center">
-            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total</p>
-            <p class="text-3xl font-extrabold text-slate-900">${chartTotal}</p>
+      <!-- Grid do card analitico: grafico circular em destaque e legenda detalhada ao lado. -->
+      <div class="grid gap-5 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-center">
+        <div class="flex justify-center">
+          <!-- Miolo do grafico: aro SVG com o total absoluto sobreposto no centro. -->
+          <div class="relative flex h-[220px] w-[220px] items-center justify-center rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
+            <svg viewBox="0 0 180 180" class="h-[180px] w-[180px]">
+              <circle cx="90" cy="90" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="18"></circle>
+              ${segments}
+            </svg>
+            <!-- Resumo central para leitura rapida sem depender da legenda lateral. -->
+            <div class="absolute text-center">
+              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Total</p>
+              <p class="mt-1 text-4xl font-extrabold text-slate-900">${chartTotal}</p>
+              <p class="text-xs text-slate-500">equipamentos</p>
+            </div>
           </div>
         </div>
-        <div class="w-full space-y-3">
-          ${deviceStatusTotals.map((item) => `
-            <div class="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3">
-              <div class="flex items-center gap-3">
-                <span class="h-3 w-3 rounded-full" style="background:${item.color}"></span>
-                <div>
-                  <p class="text-sm font-semibold text-slate-900">${item.label}</p>
-                  <p class="text-xs text-slate-500">${chartTotal ? Math.round((item.count / chartTotal) * 100) : 0}% do total</p>
+        <!-- Lista de cards por status com contagem e barra proporcional. -->
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          ${deviceStatusTotals.map((item) => {
+            const percentage = chartTotal ? Math.round((item.count / chartTotal) * 100) : 0;
+            return `
+              <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="h-3 w-3 rounded-full" style="background:${item.color}"></span>
+                      <p class="text-sm font-semibold text-slate-900">${item.label}</p>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-500">${percentage}% do parque atual</p>
+                  </div>
+                  <span class="rounded-full ${item.bg} px-3 py-1 text-sm font-semibold ${item.text}">${item.count}</span>
+                </div>
+                <div class="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                  <div class="h-full rounded-full" style="width:${percentage}%; background:${item.color}"></div>
                 </div>
               </div>
-              <span class="rounded-full ${item.bg} px-3 py-1 text-sm font-semibold ${item.text}">${item.count}</span>
-            </div>
-          `).join("")}
+            `;
+          }).join("")}
         </div>
       </div>
     `;
@@ -528,6 +571,7 @@ function renderDashboard() {
   }
 
   const max = entries[0][1];
+  // Cada linha combina rótulo, barra e contagem para deixar o comparativo compacto no dashboard.
   elements.commonSpecs.innerHTML = entries
     .map(([spec, count]) => {
       const pct = Math.max(8, Math.round((count / max) * 100));
@@ -780,33 +824,72 @@ function render() {
   renderGoogleAuth();
 }
 
+function fillComputerForm(computer = null, options = {}) {
+  const values = {
+    owner: computer?.owner || "",
+    company: computer?.company || "",
+    serial: computer?.serial || "",
+    machine: computer?.machine || "",
+    purchaseDate: computer?.purchaseDate || "",
+    warrantyMonths: computer?.warrantyMonths ?? "",
+    cpu: computer?.cpu || "",
+    ram: computer?.ram || "",
+    gpu: computer?.gpu || "",
+    storage: computer?.storage || "",
+    storageType: computer?.storageType || "SSD",
+    deviceStatus: computer?.deviceStatus || "ativo",
+    corporateEmail: computer?.corporateEmail || "",
+    os: computer?.os || "",
+    notes: computer?.notes || "",
+    ...options
+  };
+
+  renderCorporateEmailOptions(values.corporateEmail);
+  elements.form.owner.value = values.owner;
+  elements.form.company.value = values.company;
+  elements.form.serial.value = values.serial;
+  elements.form.machine.value = values.machine;
+  elements.form.purchaseDate.value = values.purchaseDate;
+  elements.form.warrantyMonths.value = values.warrantyMonths;
+  elements.form.cpu.value = values.cpu;
+  elements.form.ram.value = values.ram;
+  elements.form.gpu.value = values.gpu;
+  elements.form.storage.value = values.storage;
+  elements.form.storageType.value = values.storageType;
+  elements.form.deviceStatus.value = values.deviceStatus;
+  elements.form.corporateEmail.value = values.corporateEmail;
+  elements.form.os.value = values.os;
+  elements.form.notes.value = values.notes;
+}
+
+function applyComputerTemplate(templateId) {
+  const template = state.computers.find((item) => item.id === templateId);
+  if (!template || state.editingId) return;
+
+  fillComputerForm(template, { serial: "" });
+  elements.form.serial.focus();
+}
+
 function openModal(computer = null) {
   if (!state.auth.isAuthenticated) return;
   state.editingId = computer ? computer.id : null;
-  renderCorporateEmailOptions(computer?.corporateEmail || "");
+  renderComputerTemplateOptions();
+  elements.computerTemplateSection.classList.toggle("hidden", Boolean(computer));
+  elements.computerTemplateSelect.value = "";
   elements.modalTitle.textContent = computer ? "Editar Computador" : "Adicionar Novo Computador";
-  elements.form.owner.value = computer?.owner || "";
-  elements.form.company.value = computer?.company || "";
-  elements.form.serial.value = computer?.serial || "";
-  elements.form.machine.value = computer?.machine || "";
-  elements.form.purchaseDate.value = computer?.purchaseDate || "";
-  elements.form.warrantyMonths.value = computer?.warrantyMonths ?? "";
-  elements.form.cpu.value = computer?.cpu || "";
-  elements.form.ram.value = computer?.ram || "";
-  elements.form.gpu.value = computer?.gpu || "";
-  elements.form.storage.value = computer?.storage || "";
-  elements.form.storageType.value = computer?.storageType || "SSD";
-  elements.form.deviceStatus.value = computer?.deviceStatus || "ativo";
-  elements.form.corporateEmail.value = computer?.corporateEmail || "";
-  elements.form.os.value = computer?.os || "";
-  elements.form.notes.value = computer?.notes || "";
+  fillComputerForm(computer);
   elements.modalLayer.classList.remove("hidden");
   elements.modalLayer.classList.add("flex");
+  if (!computer) {
+    elements.form.serial.focus();
+  }
 }
 
 function closeModal() {
   state.editingId = null;
   elements.form.reset();
+  elements.computerTemplateSelect.value = "";
+  elements.computerTemplateSection.classList.remove("hidden");
   elements.modalLayer.classList.add("hidden");
   elements.modalLayer.classList.remove("flex");
 }
@@ -2092,6 +2175,9 @@ function bindEvents() {
   document.getElementById("cancel-modal").addEventListener("click", closeModal);
   elements.modalLayer.addEventListener("click", (event) => {
     if (event.target === elements.modalLayer) closeModal();
+  });
+  elements.computerTemplateSelect.addEventListener("change", (event) => {
+    applyComputerTemplate(event.target.value);
   });
 
   elements.form.addEventListener("submit", async (event) => {
