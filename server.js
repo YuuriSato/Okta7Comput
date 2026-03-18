@@ -117,6 +117,30 @@ function normalizeRole(role) {
   return String(role || "").trim().toLowerCase() === "admin" ? "admin" : "member";
 }
 
+function buildComputerPermissions(source = {}, role = "member") {
+  if (role === "admin") {
+    return { create: true, edit: true, delete: true };
+  }
+
+  const nested = source.permissions?.computers || {};
+  return {
+    create: source.can_create_computers === undefined ? (nested.create !== false) : !!source.can_create_computers,
+    edit: source.can_edit_computers === undefined ? (nested.edit !== false) : !!source.can_edit_computers,
+    delete: source.can_delete_computers === undefined ? (nested.delete !== false) : !!source.can_delete_computers
+  };
+}
+
+function buildUserPayload(source = {}) {
+  const role = normalizeRole(source.role_name || source.role);
+  return {
+    email: source.email,
+    role,
+    permissions: {
+      computers: buildComputerPermissions(source, role)
+    }
+  };
+}
+
 function ensureCorporateEmailDomain(email) {
   if (!CORPORATE_EMAIL_DOMAIN) return true;
   return normalizeEmail(email).endsWith(`@${CORPORATE_EMAIL_DOMAIN}`);
@@ -312,7 +336,10 @@ async function upsertOAuthUser({ email, provider, providerSubject }) {
 
     const corporateEmailId = await ensureCorporateEmailRecord(connection, email);
     const [existingByEmail] = await connection.execute(
-      "SELECT id, email, role_name FROM users WHERE email = ? LIMIT 1",
+      `SELECT id, email, role_name, can_create_computers, can_edit_computers, can_delete_computers
+       FROM users
+       WHERE email = ?
+       LIMIT 1`,
       [email]
     );
 
@@ -361,7 +388,7 @@ async function upsertOAuthUser({ email, provider, providerSubject }) {
     });
 
     await connection.commit();
-    return { id: userId, email, role: roleName };
+    return { id: userId, ...buildUserPayload(existingByEmail[0] || { email, role: roleName }) };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -380,7 +407,7 @@ async function authRequired(req, res, next) {
 
     const payload = jwt.verify(token, JWT_SECRET);
     const [rows] = await pool.execute(
-      `SELECT u.id, u.email, u.role_name, c.active
+      `SELECT u.id, u.email, u.role_name, u.can_create_computers, u.can_edit_computers, u.can_delete_computers, c.active
        FROM users u
        JOIN corporate_emails c ON c.id = u.corporate_email_id
        WHERE u.id = ?
@@ -393,7 +420,7 @@ async function authRequired(req, res, next) {
       return;
     }
 
-    req.auth = { id: rows[0].id, email: rows[0].email, role: normalizeRole(rows[0].role_name), token };
+    req.auth = { id: rows[0].id, token, ...buildUserPayload(rows[0]) };
     next();
   } catch (error) {
     res.status(401).json({ message: "Sessao invalida." });
@@ -406,6 +433,22 @@ function adminRequired(req, res, next) {
     return;
   }
   next();
+}
+
+function computerPermissionRequired(permission) {
+  return (req, res, next) => {
+    if (req.auth?.role === "admin") {
+      next();
+      return;
+    }
+
+    if (req.auth?.permissions?.computers?.[permission]) {
+      next();
+      return;
+    }
+
+    res.status(403).json({ message: "Voce nao tem permissao para esta operacao em computadores." });
+  };
 }
 
 app.get("/api/health", async (_req, res) => {
@@ -486,9 +529,18 @@ app.post("/api/auth/register", async (req, res) => {
     });
 
     await connection.commit();
-    const user = { id: Number(insertUser.insertId), email, role: roleName };
+    const user = {
+      id: Number(insertUser.insertId),
+      ...buildUserPayload({
+        email,
+        role: roleName,
+        can_create_computers: true,
+        can_edit_computers: true,
+        can_delete_computers: true
+      })
+    };
     const token = signAuthToken(user);
-    res.status(201).json({ token, user: { email: user.email, role: user.role } });
+    res.status(201).json({ token, user: buildUserPayload(user) });
   } catch (error) {
     if (connection) {
       try {
@@ -541,7 +593,7 @@ app.post("/api/auth/login", async (req, res) => {
 
   try {
     const [rows] = await pool.execute(
-      `SELECT u.id, u.email, u.password_hash, u.role_name, c.active
+      `SELECT u.id, u.email, u.password_hash, u.role_name, u.can_create_computers, u.can_edit_computers, u.can_delete_computers, c.active
        FROM users u
        JOIN corporate_emails c ON c.id = u.corporate_email_id
        WHERE u.email = ?
@@ -576,8 +628,9 @@ app.post("/api/auth/login", async (req, res) => {
       metadata: { roleName: normalizeRole(user.role_name) }
     });
 
-    const token = signAuthToken({ id: Number(user.id), email: user.email, role: normalizeRole(user.role_name) });
-    res.json({ token, user: { email: user.email, role: normalizeRole(user.role_name) } });
+    const authUser = { id: Number(user.id), ...buildUserPayload(user) };
+    const token = signAuthToken(authUser);
+    res.json({ token, user: buildUserPayload(user) });
   } catch (error) {
     console.error("AUTH_LOGIN_ERROR", error.code || "NO_CODE", error.message);
     if (error.code === "ER_NO_SUCH_TABLE") {
@@ -630,7 +683,7 @@ app.post("/api/auth/google", async (req, res) => {
     });
 
     const token = signAuthToken(user);
-    res.json({ token, user: { email: user.email, role: user.role } });
+    res.json({ token, user: buildUserPayload(user) });
   } catch (error) {
     console.error("AUTH_GOOGLE_ERROR", error.code || "NO_CODE", error.message);
     if (error.message === "EMAIL_NOT_ALLOWED") {
@@ -646,13 +699,13 @@ app.post("/api/auth/google", async (req, res) => {
 });
 
 app.get("/api/auth/me", authRequired, async (req, res) => {
-  res.json({ user: { email: req.auth.email, role: req.auth.role } });
+  res.json({ user: buildUserPayload(req.auth) });
 });
 
 app.get("/api/users", authRequired, adminRequired, async (_req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT u.id, u.email, u.role_name, u.auth_provider, u.created_at, c.active
+      `SELECT u.id, u.email, u.role_name, u.auth_provider, u.created_at, u.can_create_computers, u.can_edit_computers, u.can_delete_computers, c.active
        FROM users u
        JOIN corporate_emails c ON c.id = u.corporate_email_id
        ORDER BY u.created_at DESC`
@@ -663,6 +716,9 @@ app.get("/api/users", authRequired, adminRequired, async (_req, res) => {
         id: String(row.id),
         email: row.email,
         role: normalizeRole(row.role_name),
+        permissions: {
+          computers: buildComputerPermissions(row, normalizeRole(row.role_name))
+        },
         authProvider: row.auth_provider || "local",
         active: !!row.active,
         createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
@@ -689,7 +745,10 @@ app.put("/api/users/:id/role", authRequired, adminRequired, async (req, res) => 
 
   try {
     const [rows] = await pool.execute(
-      "SELECT id, email, role_name FROM users WHERE id = ? LIMIT 1",
+      `SELECT id, email, role_name, can_create_computers, can_edit_computers, can_delete_computers
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
       [id]
     );
     if (!rows.length) {
@@ -725,11 +784,79 @@ app.put("/api/users/:id/role", authRequired, adminRequired, async (req, res) => 
       user: {
         id: String(id),
         email: rows[0].email,
-        role: roleName
+        role: roleName,
+        permissions: {
+          computers: buildComputerPermissions(rows[0], roleName)
+        }
       }
     });
   } catch (error) {
     res.status(500).json({ message: "Falha ao atualizar permissao do usuario." });
+  }
+});
+
+app.put("/api/users/:id/computer-permissions", authRequired, adminRequired, async (req, res) => {
+  const id = Number(req.params.id);
+  const source = req.body?.permissions?.computers || {};
+  const permissions = {
+    create: source.create !== false,
+    edit: source.edit !== false,
+    delete: source.delete !== false
+  };
+
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ message: "ID invalido." });
+    return;
+  }
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT id, email, role_name, can_create_computers, can_edit_computers, can_delete_computers
+       FROM users
+       WHERE id = ?
+       LIMIT 1`,
+      [id]
+    );
+    if (!rows.length) {
+      res.status(404).json({ message: "Usuario nao encontrado." });
+      return;
+    }
+    if (normalizeRole(rows[0].role_name) === "admin") {
+      res.status(400).json({ message: "Administradores possuem acesso total fixo." });
+      return;
+    }
+
+    await pool.execute(
+      `UPDATE users
+       SET can_create_computers = ?, can_edit_computers = ?, can_delete_computers = ?
+       WHERE id = ?`,
+      [permissions.create ? 1 : 0, permissions.edit ? 1 : 0, permissions.delete ? 1 : 0, id]
+    );
+    await writeAuditLog({
+      actorUserId: req.auth.id,
+      actorEmail: req.auth.email,
+      actionType: "user.computer-permissions.update",
+      entityType: "user",
+      entityId: String(id),
+      description: `Permissoes de computadores do usuario ${rows[0].email} foram atualizadas.`,
+      metadata: {
+        previousPermissions: buildComputerPermissions(rows[0], normalizeRole(rows[0].role_name)),
+        nextPermissions: permissions
+      }
+    });
+
+    res.json({
+      user: {
+        id: String(id),
+        email: rows[0].email,
+        role: normalizeRole(rows[0].role_name),
+        permissions: {
+          computers: permissions
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Falha ao atualizar acessos de computadores." });
   }
 });
 
@@ -1222,7 +1349,7 @@ app.get("/api/computers", authRequired, async (_req, res) => {
   }
 });
 
-app.post("/api/computers", authRequired, async (req, res) => {
+app.post("/api/computers", authRequired, computerPermissionRequired("create"), async (req, res) => {
   const payload = normalizeComputerPayload(req.body || {});
 
   if (!payload.owner || !payload.serial) {
@@ -1303,7 +1430,7 @@ app.post("/api/computers", authRequired, async (req, res) => {
   }
 });
 
-app.put("/api/computers/:id", authRequired, async (req, res) => {
+app.put("/api/computers/:id", authRequired, computerPermissionRequired("edit"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
     res.status(400).json({ message: "ID invalido." });
@@ -1395,7 +1522,7 @@ app.put("/api/computers/:id", authRequired, async (req, res) => {
   }
 });
 
-app.delete("/api/computers/:id", authRequired, async (req, res) => {
+app.delete("/api/computers/:id", authRequired, computerPermissionRequired("delete"), async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
     res.status(400).json({ message: "ID invalido." });

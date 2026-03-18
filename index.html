@@ -133,7 +133,7 @@
             </div>
           </header>
 
-          <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
+          <section id="computer-import-section" class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
             <!-- Layout da importacao: guia visual dos campos suportados + acoes laterais de template/upload. -->
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div class="max-w-3xl">
@@ -364,6 +364,11 @@
             <p class="mt-1 text-lg text-slate-600">Gerencie papéis e acessos dos usuários do sistema</p>
           </header>
 
+          <section class="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-5 text-sm text-slate-700 shadow-sm">
+            <p class="font-semibold text-slate-900">Controle de computadores</p>
+            <p class="mt-2">Administradores continuam com acesso total. Para membros, você pode definir quem pode adicionar, editar e excluir computadores. Quando os três acessos ficam desligados, o usuário permanece em modo somente leitura.</p>
+          </section>
+
           <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 transition duration-300 hover:-translate-y-0.5 hover:shadow-md">
             <div class="flex items-center justify-between gap-4">
               <div>
@@ -376,11 +381,12 @@
               <table class="min-w-full border-collapse">
                 <thead class="border-b border-slate-200 text-left text-sm font-semibold text-slate-600">
                   <tr>
-                    <th class="px-4 py-3">Email</th>
+                    <th class="px-4 py-3">Usuário</th>
                     <th class="px-4 py-3">Papel</th>
-                    <th class="px-4 py-3">Provedor</th>
-                    <th class="px-4 py-3">Status</th>
-                    <th class="px-4 py-3">Cadastro</th>
+                    <th class="px-4 py-3">Resumo</th>
+                    <th class="px-4 py-3 text-center">Adicionar</th>
+                    <th class="px-4 py-3 text-center">Editar</th>
+                    <th class="px-4 py-3 text-center">Excluir</th>
                     <th class="px-4 py-3 text-right">Ações</th>
                   </tr>
                 </thead>

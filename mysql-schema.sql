@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS users (
   auth_provider VARCHAR(32) NOT NULL DEFAULT 'local',
   provider_subject VARCHAR(255) NULL,
   role_name VARCHAR(32) NOT NULL DEFAULT 'member',
+  can_create_computers TINYINT(1) NOT NULL DEFAULT 1,
+  can_edit_computers TINYINT(1) NOT NULL DEFAULT 1,
+  can_delete_computers TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_users_email (email),
@@ -127,6 +130,27 @@ SET @exists := (
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role_name'
 );
 SET @sql := IF(@exists = 0, 'ALTER TABLE users ADD COLUMN role_name VARCHAR(32) NOT NULL DEFAULT ''member''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'can_create_computers'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE users ADD COLUMN can_create_computers TINYINT(1) NOT NULL DEFAULT 1', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'can_edit_computers'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE users ADD COLUMN can_edit_computers TINYINT(1) NOT NULL DEFAULT 1', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'users' AND COLUMN_NAME = 'can_delete_computers'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE users ADD COLUMN can_delete_computers TINYINT(1) NOT NULL DEFAULT 1', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (

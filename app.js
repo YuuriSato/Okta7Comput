@@ -26,6 +26,7 @@ const elements = {
   modalLayer: document.getElementById("modal-layer"),
   modalTitle: document.getElementById("modal-title"),
   form: document.getElementById("computer-form"),
+  importSection: document.getElementById("computer-import-section"),
   computerTemplateSection: document.getElementById("computer-template-section"),
   computerTemplateHelp: document.getElementById("computer-template-help"),
   computerTemplateSelect: document.getElementById("computer-template-select"),
@@ -83,6 +84,12 @@ const elements = {
   permissionsFeedback: document.getElementById("permissions-feedback"),
   auditCount: document.getElementById("audit-count"),
   auditTableBody: document.getElementById("audit-table-body"),
+  goComputers: document.getElementById("go-computers"),
+  newFromDashboard: document.getElementById("new-from-dashboard"),
+  newFromTable: document.getElementById("new-from-table"),
+  floatingAdd: document.getElementById("floating-add"),
+  exportCsv: document.getElementById("export-csv"),
+  exportPdf: document.getElementById("export-pdf"),
 };
 
 const state = {
@@ -110,13 +117,36 @@ const state = {
   }
 };
 
+function normalizeComputerPermissions(rawPermissions = {}, role = "member") {
+  if (role === "admin") {
+    return { create: true, edit: true, delete: true };
+  }
+
+  const source = rawPermissions?.computers || rawPermissions || {};
+  return {
+    create: source.create !== false,
+    edit: source.edit !== false,
+    delete: source.delete !== false
+  };
+}
+
+function normalizeUser(user) {
+  if (!user || typeof user.email !== "string") return null;
+  const role = user.role === "admin" ? "admin" : "member";
+  return {
+    email: user.email,
+    role,
+    permissions: {
+      computers: normalizeComputerPermissions(user.permissions, role)
+    }
+  };
+}
+
 // Recupera a sessao persistida e normaliza o papel para evitar valores inesperados.
 function loadUser() {
   try {
     const user = JSON.parse(localStorage.getItem(AUTH_USER_KEY) || "null");
-    return user && typeof user.email === "string"
-      ? { email: user.email, role: user.role === "admin" ? "admin" : "member" }
-      : null;
+    return normalizeUser(user);
   } catch (error) {
     return null;
   }
@@ -184,11 +214,11 @@ function describeDeviceStatus(status) {
 }
 
 function persistAuthSession(payload) {
-  state.auth.user = payload.user;
+  state.auth.user = normalizeUser(payload.user);
   state.auth.token = payload.token;
   state.auth.isAuthenticated = true;
   localStorage.setItem(AUTH_TOKEN_KEY, payload.token);
-  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(payload.user));
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(state.auth.user));
 }
 
 function clearAuthSession() {
@@ -440,6 +470,36 @@ function isAdmin() {
   return state.auth.user?.role === "admin";
 }
 
+function currentComputerPermissions(user = state.auth.user) {
+  if (!user) {
+    return { create: false, edit: false, delete: false };
+  }
+  return normalizeComputerPermissions(user?.permissions, user?.role || "member");
+}
+
+function canCreateComputers(user = state.auth.user) {
+  return currentComputerPermissions(user).create;
+}
+
+function canEditComputers(user = state.auth.user) {
+  return currentComputerPermissions(user).edit;
+}
+
+function canDeleteComputers(user = state.auth.user) {
+  return currentComputerPermissions(user).delete;
+}
+
+function isComputerReadOnly(user) {
+  const permissions = currentComputerPermissions(user);
+  return !permissions.create && !permissions.edit && !permissions.delete;
+}
+
+function computerAccessSummary(user) {
+  if (user?.role === "admin") return "Acesso total";
+  if (isComputerReadOnly(user)) return "Somente leitura";
+  return "Personalizado";
+}
+
 function roleLabel(role) {
   return role === "admin" ? "Administrador" : "Membro";
 }
@@ -631,6 +691,15 @@ function renderTable() {
     .map((computer) => {
       const status = getWarrantyStatus(computer);
       const remaining = getRemainingDays(computer);
+      const actions = [
+        `<button data-action="view" data-id="${computer.id}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">Ver</button>`
+      ];
+      if (canEditComputers()) {
+        actions.push(`<button data-action="edit" data-id="${computer.id}" class="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Editar</button>`);
+      }
+      if (canDeleteComputers()) {
+        actions.push(`<button data-action="delete" data-id="${computer.id}" class="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">Deletar</button>`);
+      }
       return `
         <tr class="hover:bg-slate-50/80">
           <td class="px-4 py-4 font-semibold">${escapeHtml(computer.serial)}</td>
@@ -652,9 +721,7 @@ function renderTable() {
           </td>
           <td class="px-4 py-4">
             <div class="flex justify-end gap-2">
-              <button data-action="view" data-id="${computer.id}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100">Ver</button>
-              <button data-action="edit" data-id="${computer.id}" class="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">Editar</button>
-              <button data-action="delete" data-id="${computer.id}" class="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100">Deletar</button>
+              ${actions.join("")}
             </div>
           </td>
         </tr>
@@ -776,7 +843,7 @@ function renderPermissions() {
   if (!isAdmin()) {
     elements.usersTableBody.innerHTML = `
       <tr>
-        <td colspan="6" class="px-4 py-8 text-center text-slate-500">Somente administradores podem gerenciar permissões.</td>
+        <td colspan="7" class="px-4 py-8 text-center text-slate-500">Somente administradores podem gerenciar permissões.</td>
       </tr>
     `;
     return;
@@ -785,7 +852,7 @@ function renderPermissions() {
   if (!rows.length) {
     elements.usersTableBody.innerHTML = `
       <tr>
-        <td colspan="6" class="px-4 py-8 text-center text-slate-500">Nenhum usuário encontrado.</td>
+        <td colspan="7" class="px-4 py-8 text-center text-slate-500">Nenhum usuário encontrado.</td>
       </tr>
     `;
     return;
@@ -793,19 +860,46 @@ function renderPermissions() {
 
   elements.usersTableBody.innerHTML = rows.map((user) => `
     <tr class="hover:bg-slate-50/80">
-      <td class="px-4 py-4 font-medium">${escapeHtml(user.email)}</td>
+      <td class="px-4 py-4">
+        <div class="space-y-1">
+          <p class="font-medium">${escapeHtml(user.email)}</p>
+          <p class="text-xs text-slate-500">Provedor: ${escapeHtml(providerLabel(user.authProvider))}</p>
+          <p class="text-xs text-slate-500">Cadastro: ${formatDate(user.createdAt)}</p>
+        </div>
+      </td>
       <td class="px-4 py-4">${roleBadge(user.role)}</td>
-      <td class="px-4 py-4">${escapeHtml(providerLabel(user.authProvider))}</td>
-      <td class="px-4 py-4">${activeBadge(user.active)}</td>
-      <td class="px-4 py-4">${formatDate(user.createdAt)}</td>
+      <td class="px-4 py-4">
+        <div class="space-y-2">
+          ${activeBadge(user.active)}
+          <p class="text-xs font-medium text-slate-500">${escapeHtml(computerAccessSummary(user))}</p>
+        </div>
+      </td>
+      <td class="px-4 py-4 text-center">
+        <input data-permission-input="create" data-id="${user.id}" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-200" ${currentComputerPermissions(user).create ? "checked" : ""} ${user.role === "admin" ? "disabled" : ""} />
+      </td>
+      <td class="px-4 py-4 text-center">
+        <input data-permission-input="edit" data-id="${user.id}" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-200" ${currentComputerPermissions(user).edit ? "checked" : ""} ${user.role === "admin" ? "disabled" : ""} />
+      </td>
+      <td class="px-4 py-4 text-center">
+        <input data-permission-input="delete" data-id="${user.id}" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-200" ${currentComputerPermissions(user).delete ? "checked" : ""} ${user.role === "admin" ? "disabled" : ""} />
+      </td>
       <td class="px-4 py-4 text-right">
         <div class="flex justify-end gap-2">
           <button data-user-action="make-member" data-id="${user.id}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-100" ${user.role !== "admin" ? "disabled" : ""}>Tornar Membro</button>
           <button data-user-action="make-admin" data-id="${user.id}" class="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100" ${user.role === "admin" ? "disabled" : ""}>Tornar Admin</button>
+          <button data-user-action="save-computer-permissions" data-id="${user.id}" class="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100" ${user.role === "admin" ? "disabled" : ""}>Salvar Acessos</button>
         </div>
       </td>
     </tr>
   `).join("");
+}
+
+function applyComputerPermissionUI() {
+  const canCreate = state.auth.isAuthenticated && canCreateComputers();
+  elements.newFromDashboard.classList.toggle("hidden", !canCreate);
+  elements.newFromTable.classList.toggle("hidden", !canCreate);
+  elements.floatingAdd.classList.toggle("hidden", !canCreate);
+  elements.importSection.classList.toggle("hidden", !canCreate);
 }
 
 function renderAuditLogs() {
@@ -848,6 +942,7 @@ function render() {
   renderAuditLogs();
   applyAuthGate();
   renderGoogleAuth();
+  applyComputerPermissionUI();
 }
 
 function fillComputerForm(computer = null, options = {}) {
@@ -918,6 +1013,8 @@ function syncComputerOptionalFields() {
 
 function openModal(computer = null) {
   if (!state.auth.isAuthenticated) return;
+  if (computer && !canEditComputers()) return;
+  if (!computer && !canCreateComputers()) return;
   state.editingId = computer ? computer.id : null;
   renderComputerTemplateOptions();
   elements.computerTemplateSection.classList.toggle("hidden", Boolean(computer));
@@ -947,6 +1044,12 @@ function closeModal() {
 }
 
 async function upsertComputer(formData) {
+  if (state.editingId && !canEditComputers()) {
+    throw new Error("Voce nao tem permissao para editar computadores.");
+  }
+  if (!state.editingId && !canCreateComputers()) {
+    throw new Error("Voce nao tem permissao para cadastrar computadores.");
+  }
   const rawWarrantyMonths = String(formData.get("warrantyMonths") || "").trim();
   const warrantyMonths = elements.warrantyMonthsUnknown.checked || !rawWarrantyMonths
     ? null
@@ -1087,6 +1190,9 @@ function viewComputer(id) {
 }
 
 async function deleteComputer(id) {
+  if (!canDeleteComputers()) {
+    throw new Error("Voce nao tem permissao para excluir computadores.");
+  }
   const ok = window.confirm("Deseja realmente deletar este computador?");
   if (!ok) return;
 
@@ -1368,7 +1474,12 @@ function escapeHtml(text) {
 function readMockUsers() {
   try {
     const users = JSON.parse(localStorage.getItem(MOCK_USERS_KEY) || "[]");
-    return Array.isArray(users) ? users : [];
+    if (!Array.isArray(users)) return [];
+    const normalized = users.map((user, index) => normalizeMockUserRecord(user, index === 0));
+    if (JSON.stringify(normalized) !== JSON.stringify(users)) {
+      writeMockUsers(normalized);
+    }
+    return normalized;
   } catch (error) {
     return [];
   }
@@ -1376,6 +1487,27 @@ function readMockUsers() {
 
 function writeMockUsers(users) {
   localStorage.setItem(MOCK_USERS_KEY, JSON.stringify(users));
+}
+
+function buildMockUserId(email = "") {
+  const normalized = encodeURIComponent(String(email || "").trim().toLowerCase()).replace(/%/g, "");
+  return `usr_${normalized || "anon"}`;
+}
+
+function normalizeMockUserRecord(user = {}, isFirstUser = false) {
+  const role = user.role === "admin" || isFirstUser ? "admin" : "member";
+  return {
+    id: user.id || buildMockUserId(user.email),
+    email: String(user.email || "").trim().toLowerCase(),
+    password: String(user.password || ""),
+    role,
+    permissions: {
+      computers: normalizeComputerPermissions(user.permissions, role)
+    },
+    authProvider: user.authProvider || "local",
+    active: user.active !== false,
+    createdAt: user.createdAt || new Date().toISOString()
+  };
 }
 
 function readMockComputers() {
@@ -1523,6 +1655,38 @@ function decodeMockToken(token) {
   }
 }
 
+function getMockUserByToken(token) {
+  const email = decodeMockToken(token);
+  if (!email) return null;
+  return readMockUsers().find((user) => user.email === email) || null;
+}
+
+function assertMockComputerPermission(token, permission) {
+  const user = getMockUserByToken(token);
+  if (!user) {
+    throw new Error("Sessao invalida.");
+  }
+  if (user.role === "admin") {
+    return user;
+  }
+  const permissions = normalizeComputerPermissions(user.permissions, user.role);
+  if (!permissions[permission]) {
+    throw new Error("Voce nao tem permissao para esta operacao em computadores.");
+  }
+  return user;
+}
+
+function assertMockAdmin(token) {
+  const user = getMockUserByToken(token);
+  if (!user) {
+    throw new Error("Sessao invalida.");
+  }
+  if (user.role !== "admin") {
+    throw new Error("Permissao de administrador necessaria.");
+  }
+  return user;
+}
+
 const mockAuthService = {
   async login(payload) {
     const email = String(payload.email || "").trim().toLowerCase();
@@ -1532,7 +1696,7 @@ const mockAuthService = {
     if (!found) {
       throw new Error("Credenciais invalidas.");
     }
-    return { token: buildMockToken(email), user: { email } };
+    return { token: buildMockToken(email), user: normalizeUser(found) };
   },
   async register(payload) {
     const email = String(payload.email || "").trim().toLowerCase();
@@ -1542,16 +1706,27 @@ const mockAuthService = {
     if (exists) {
       throw new Error("Email ja cadastrado.");
     }
-    users.push({ email, password });
+    const created = normalizeMockUserRecord({
+      email,
+      password,
+      role: users.length === 0 ? "admin" : "member",
+      permissions: { computers: { create: true, edit: true, delete: true } }
+    }, users.length === 0);
+    users.push(created);
     writeMockUsers(users);
-    return { token: buildMockToken(email), user: { email } };
+    return { token: buildMockToken(email), user: normalizeUser(created) };
   },
   async me(token) {
     const email = decodeMockToken(token);
     if (!email) {
       throw new Error("Sessao invalida.");
     }
-    return { user: { email } };
+    const users = readMockUsers();
+    const found = users.find((user) => user.email === email);
+    if (!found) {
+      throw new Error("Sessao invalida.");
+    }
+    return { user: normalizeUser(found) };
   },
   async logout() {
     return true;
@@ -1563,7 +1738,8 @@ const mockInventoryService = {
     return sortByCreatedAtDesc(readMockComputers());
   },
 
-  async createComputer(_token, payload) {
+  async createComputer(token, payload) {
+    assertMockComputerPermission(token, "create");
     const computers = readMockComputers();
     const corporateEmails = readMockCorporateEmails();
     const serial = String(payload.serial || "").trim().toLowerCase();
@@ -1582,7 +1758,8 @@ const mockInventoryService = {
     return computer;
   },
 
-  async updateComputer(_token, id, payload) {
+  async updateComputer(token, id, payload) {
+    assertMockComputerPermission(token, "edit");
     const computers = readMockComputers();
     const corporateEmails = readMockCorporateEmails();
     const index = computers.findIndex((computer) => computer.id === id);
@@ -1606,7 +1783,8 @@ const mockInventoryService = {
     return updated;
   },
 
-  async deleteComputer(_token, id) {
+  async deleteComputer(token, id) {
+    assertMockComputerPermission(token, "delete");
     const computers = readMockComputers();
     const filtered = computers.filter((computer) => computer.id !== id);
 
@@ -1737,6 +1915,66 @@ const mockInventoryService = {
     writeMockComputers(updatedComputers);
     writeMockComputerMovements(movements.filter((item) => item.id !== id));
     return updatedComputers.find((computer) => computer.id === movement.computerId) || null;
+  },
+
+  async listUsers(token) {
+    assertMockAdmin(token);
+    return sortByCreatedAtDesc(readMockUsers()).map((user) => ({
+      id: String(user.id),
+      email: user.email,
+      role: user.role,
+      permissions: user.permissions,
+      authProvider: user.authProvider || "local",
+      active: user.active !== false,
+      createdAt: user.createdAt || new Date().toISOString()
+    }));
+  },
+
+  async updateUserRole(token, id, role) {
+    assertMockAdmin(token);
+    const users = readMockUsers();
+    const index = users.findIndex((user) => String(user.id) === String(id));
+    if (index < 0) {
+      throw new Error("Usuario nao encontrado.");
+    }
+
+    users[index] = normalizeMockUserRecord({
+      ...users[index],
+      role
+    });
+    writeMockUsers(users);
+    return {
+      id: String(users[index].id),
+      email: users[index].email,
+      role: users[index].role,
+      permissions: users[index].permissions
+    };
+  },
+
+  async updateUserComputerPermissions(token, id, permissions) {
+    assertMockAdmin(token);
+    const users = readMockUsers();
+    const index = users.findIndex((user) => String(user.id) === String(id));
+    if (index < 0) {
+      throw new Error("Usuario nao encontrado.");
+    }
+    if (users[index].role === "admin") {
+      throw new Error("Administradores possuem acesso total fixo.");
+    }
+
+    users[index] = normalizeMockUserRecord({
+      ...users[index],
+      permissions: {
+        computers: normalizeComputerPermissions(permissions, users[index].role)
+      }
+    });
+    writeMockUsers(users);
+    return {
+      id: String(users[index].id),
+      email: users[index].email,
+      role: users[index].role,
+      permissions: users[index].permissions
+    };
   }
 };
 
@@ -1859,7 +2097,7 @@ function normalizeAuthPayload(data) {
   }
   return {
     token: data.token,
-    user: { email: data.user.email, role: data.user.role === "admin" ? "admin" : "member" }
+    user: normalizeUser(data.user)
   };
 }
 
@@ -1867,7 +2105,7 @@ function normalizeMePayload(data) {
   if (!data || !data.user || typeof data.user.email !== "string") {
     throw new Error("Sessao invalida.");
   }
-  return { user: { email: data.user.email, role: data.user.role === "admin" ? "admin" : "member" } };
+  return { user: normalizeUser(data.user) };
 }
 
 async function handleGoogleCredentialResponse(response) {
@@ -2079,6 +2317,7 @@ const inventoryService = {
   },
 
   async listUsers(token) {
+    if (AUTH_USE_MOCK) return mockInventoryService.listUsers(token);
     const result = await apiRequest({
       url: `${API_BASE_URL}/users`,
       method: "GET",
@@ -2091,6 +2330,7 @@ const inventoryService = {
   },
 
   async updateUserRole(token, id, role) {
+    if (AUTH_USE_MOCK) return mockInventoryService.updateUserRole(token, id, role);
     const result = await apiRequest({
       url: `${API_BASE_URL}/users/${encodeURIComponent(id)}/role`,
       method: "PUT",
@@ -2099,6 +2339,20 @@ const inventoryService = {
     });
     if (!result.ok) {
       throw new Error(result.message || "Falha ao atualizar permissao.");
+    }
+    return result.data.user;
+  },
+
+  async updateUserComputerPermissions(token, id, permissions) {
+    if (AUTH_USE_MOCK) return mockInventoryService.updateUserComputerPermissions(token, id, permissions);
+    const result = await apiRequest({
+      url: `${API_BASE_URL}/users/${encodeURIComponent(id)}/computer-permissions`,
+      method: "PUT",
+      token,
+      body: { permissions }
+    });
+    if (!result.ok) {
+      throw new Error(result.message || "Falha ao atualizar acessos de computador.");
     }
     return result.data.user;
   },
@@ -2155,9 +2409,9 @@ async function validateExistingSession() {
   try {
     setAuthLoading(true);
     const result = await authService.me(state.auth.token);
-    state.auth.user = result.user;
+    state.auth.user = normalizeUser(result.user);
     state.auth.isAuthenticated = true;
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(result.user));
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(state.auth.user));
   } catch (error) {
     clearAuthSession();
     setAuthMode("login");
@@ -2228,13 +2482,13 @@ function bindEvents() {
     });
   });
 
-  document.getElementById("go-computers").addEventListener("click", () => {
+  elements.goComputers.addEventListener("click", () => {
     if (!state.auth.isAuthenticated) return;
     state.currentView = "computadores";
     render();
   });
 
-  document.querySelectorAll("#new-from-dashboard, #new-from-table, #floating-add").forEach((button) => {
+  [elements.newFromDashboard, elements.newFromTable, elements.floatingAdd].forEach((button) => {
     button.addEventListener("click", () => openModal());
   });
 
@@ -2303,10 +2557,23 @@ function bindEvents() {
     const button = event.target.closest("button[data-user-action]");
     if (!button) return;
 
-    const role = button.dataset.userAction === "make-admin" ? "admin" : "member";
     try {
-      await inventoryService.updateUserRole(state.auth.token, button.dataset.id, role);
-      setPermissionsFeedback(`Permissão atualizada para ${roleLabel(role)}.`, "ok");
+      if (button.dataset.userAction === "save-computer-permissions") {
+        const row = button.closest("tr");
+        const permissions = {
+          computers: {
+            create: !!row?.querySelector('input[data-permission-input="create"]')?.checked,
+            edit: !!row?.querySelector('input[data-permission-input="edit"]')?.checked,
+            delete: !!row?.querySelector('input[data-permission-input="delete"]')?.checked
+          }
+        };
+        await inventoryService.updateUserComputerPermissions(state.auth.token, button.dataset.id, permissions);
+        setPermissionsFeedback("Acessos de computadores atualizados.", "ok");
+      } else {
+        const role = button.dataset.userAction === "make-admin" ? "admin" : "member";
+        await inventoryService.updateUserRole(state.auth.token, button.dataset.id, role);
+        setPermissionsFeedback(`Permissão atualizada para ${roleLabel(role)}.`, "ok");
+      }
       await refreshInventoryData();
       render();
     } catch (error) {
@@ -2369,10 +2636,18 @@ function bindEvents() {
     const { action, id } = button.dataset;
     if (action === "view") viewComputer(id);
     if (action === "edit") {
+      if (!canEditComputers()) {
+        window.alert("Voce nao tem permissao para editar computadores.");
+        return;
+      }
       const computer = state.computers.find((item) => item.id === id);
       if (computer) openModal(computer);
     }
     if (action === "delete") {
+      if (!canDeleteComputers()) {
+        window.alert("Voce nao tem permissao para excluir computadores.");
+        return;
+      }
       try {
         await deleteComputer(id);
       } catch (error) {
@@ -2381,16 +2656,21 @@ function bindEvents() {
     }
   });
 
-  document.getElementById("export-csv").addEventListener("click", () => {
+  elements.exportCsv.addEventListener("click", () => {
     if (!state.auth.isAuthenticated) return;
     exportCsv();
   });
-  document.getElementById("export-pdf").addEventListener("click", () => {
+  elements.exportPdf.addEventListener("click", () => {
     if (!state.auth.isAuthenticated) return;
     window.print();
   });
   elements.importInput.addEventListener("change", (event) => {
     if (!state.auth.isAuthenticated) return;
+    if (!canCreateComputers()) {
+      setImportFeedback("Voce nao tem permissao para importar ou cadastrar computadores.", "error");
+      event.target.value = "";
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
     setImportFeedback(`Importando ${file.name}...`, "ok");
