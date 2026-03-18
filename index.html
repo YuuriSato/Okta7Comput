@@ -543,12 +543,20 @@
             </label>
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
               <label class="space-y-1 text-sm">
-                <span class="font-semibold text-slate-700">Data de Compra *</span>
-                <input name="purchaseDate" type="date" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+                <span class="font-semibold text-slate-700">Data de Compra</span>
+                <input name="purchaseDate" type="date" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400" />
+                <span class="mt-2 inline-flex items-center gap-2 text-xs text-slate-500">
+                  <input id="purchase-date-unknown" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-200" />
+                  Não informado
+                </span>
               </label>
               <label class="space-y-1 text-sm">
-                <span class="font-semibold text-slate-700">Tempo de Garantia (meses) *</span>
-                <input name="warrantyMonths" type="number" min="0" required placeholder="Ex: 12" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+                <span class="font-semibold text-slate-700">Tempo de Garantia (meses)</span>
+                <input name="warrantyMonths" type="number" min="0" placeholder="Ex: 12" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400" />
+                <span class="mt-2 inline-flex items-center gap-2 text-xs text-slate-500">
+                  <input id="warranty-months-unknown" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-brand-500 focus:ring-brand-200" />
+                  Não informado
+                </span>
               </label>
             </div>
           </section>
@@ -598,6 +606,11 @@
           <!-- Campo livre isolado para nao competir visualmente com os dados estruturados acima. -->
           <section class="space-y-4">
             <h4 class="text-2xl font-bold">Observações</h4>
+            <label class="space-y-1 text-sm block">
+              <span class="font-semibold text-slate-700">Senha da Máquina</span>
+              <input name="machinePassword" placeholder="Ex: senha configurada para acesso local" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100" />
+              <span class="text-xs text-slate-500">Campo opcional salvo apenas como lembrete.</span>
+            </label>
             <label class="space-y-1 text-sm block">
               <span class="font-semibold text-slate-700">Notas adicionais</span>
               <textarea name="notes" rows="3" placeholder="Adicione qualquer informação relevante..." class="w-full rounded-xl border border-slate-300 px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"></textarea>

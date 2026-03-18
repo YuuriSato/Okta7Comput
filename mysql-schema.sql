@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS computers (
   machine_model VARCHAR(120) NULL,
   device_status ENUM('ativo','inativo','pendente') NOT NULL DEFAULT 'ativo',
   purchase_date DATE NULL,
-  warranty_months INT UNSIGNED NOT NULL DEFAULT 0,
+  warranty_months INT UNSIGNED NULL,
   warranty_days INT UNSIGNED NOT NULL DEFAULT 0,
   cpu VARCHAR(255) NULL,
   ram VARCHAR(255) NULL,
@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS computers (
   storage VARCHAR(120) NULL,
   storage_type VARCHAR(40) NULL,
   operating_system VARCHAR(120) NULL,
+  machine_password VARCHAR(255) NULL,
   notes TEXT NULL,
   specs TEXT NOT NULL,
   corporate_email_id BIGINT UNSIGNED NULL,
@@ -160,7 +161,7 @@ SET @exists := (
   SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'warranty_months'
 );
-SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN warranty_months INT UNSIGNED NOT NULL DEFAULT 0', 'SELECT 1');
+SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN warranty_months INT UNSIGNED NULL', 'ALTER TABLE computers MODIFY COLUMN warranty_months INT UNSIGNED NULL');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (
@@ -210,6 +211,13 @@ SET @exists := (
   WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'operating_system'
 );
 SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN operating_system VARCHAR(120) NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'computers' AND COLUMN_NAME = 'machine_password'
+);
+SET @sql := IF(@exists = 0, 'ALTER TABLE computers ADD COLUMN machine_password VARCHAR(255) NULL', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @exists := (

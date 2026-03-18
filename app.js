@@ -29,6 +29,8 @@ const elements = {
   computerTemplateSection: document.getElementById("computer-template-section"),
   computerTemplateHelp: document.getElementById("computer-template-help"),
   computerTemplateSelect: document.getElementById("computer-template-select"),
+  purchaseDateUnknown: document.getElementById("purchase-date-unknown"),
+  warrantyMonthsUnknown: document.getElementById("warranty-months-unknown"),
   tableBody: document.getElementById("table-body"),
   tableCount: document.getElementById("table-count"),
   filterSearch: document.getElementById("filter-search"),
@@ -271,34 +273,51 @@ function renderNav() {
   });
 }
 
+function parseOptionalNonNegativeNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
 function getRemainingDays(computer) {
+  const warrantyMonths = parseOptionalNonNegativeNumber(computer.warrantyMonths);
+  const warrantyDays = parseOptionalNonNegativeNumber(computer.warrantyDays) ?? 0;
   // Preferimos a data de compra quando existe; o fallback por createdAt cobre cadastros legados.
-  if (computer.purchaseDate && (computer.warrantyMonths || computer.warrantyMonths === 0)) {
+  if (computer.purchaseDate && warrantyMonths !== null) {
     const startDate = new Date(computer.purchaseDate);
     if (!Number.isNaN(startDate.getTime())) {
       const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + Number(computer.warrantyMonths || 0));
+      endDate.setMonth(endDate.getMonth() + warrantyMonths);
       return Math.ceil((endDate.getTime() - Date.now()) / 86400000);
     }
   }
 
+  if (!warrantyDays) {
+    return null;
+  }
+
   const createdAtMs = new Date(computer.createdAt || Date.now()).getTime();
   if (Number.isNaN(createdAtMs)) {
-    return Number(computer.warrantyDays) || 0;
+    return warrantyDays;
   }
   const now = new Date();
   const diffDays = Math.floor((now.getTime() - createdAtMs) / 86400000);
-  return Number(computer.warrantyDays) - diffDays;
+  return warrantyDays - diffDays;
 }
 
 function getWarrantyStatus(computer) {
   const remaining = getRemainingDays(computer);
+  if (remaining === null) return "nao_informada";
   if (remaining <= 0) return "vencida";
   if (remaining <= 30) return "proxima";
   return "ativa";
 }
 
 function statusBadge(status) {
+  if (status === "nao_informada") {
+    return '<span class="inline-flex rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">Nao informada</span>';
+  }
   if (status === "ativa") {
     return '<span class="inline-flex rounded-full border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Ativa</span>';
   }
@@ -309,9 +328,16 @@ function statusBadge(status) {
 }
 
 function formatRemaining(remaining) {
+  if (remaining === null) return "Nao informado";
   if (remaining <= 0) return "Sem cobertura";
   if (remaining === 1) return "1 dia";
   return `${remaining} dias`;
+}
+
+function formatWarrantyMonthsLabel(value) {
+  const warrantyMonths = parseOptionalNonNegativeNumber(value);
+  if (warrantyMonths === null) return "Nao informada";
+  return `${warrantyMonths} meses`;
 }
 
 function buildSpecs(payload) {
@@ -840,6 +866,7 @@ function fillComputerForm(computer = null, options = {}) {
     deviceStatus: computer?.deviceStatus || "ativo",
     corporateEmail: computer?.corporateEmail || "",
     os: computer?.os || "",
+    machinePassword: computer?.machinePassword || "",
     notes: computer?.notes || "",
     ...options
   };
@@ -859,7 +886,11 @@ function fillComputerForm(computer = null, options = {}) {
   elements.form.deviceStatus.value = values.deviceStatus;
   elements.form.corporateEmail.value = values.corporateEmail;
   elements.form.os.value = values.os;
+  elements.form.machinePassword.value = values.machinePassword;
   elements.form.notes.value = values.notes;
+  elements.purchaseDateUnknown.checked = !values.purchaseDate;
+  elements.warrantyMonthsUnknown.checked = values.warrantyMonths === null || values.warrantyMonths === "";
+  syncComputerOptionalFields();
 }
 
 function applyComputerTemplate(templateId) {
@@ -870,6 +901,21 @@ function applyComputerTemplate(templateId) {
   elements.form.serial.focus();
 }
 
+function syncComputerOptionalFields() {
+  const purchaseDateUnknown = elements.purchaseDateUnknown.checked;
+  const warrantyMonthsUnknown = elements.warrantyMonthsUnknown.checked;
+
+  elements.form.purchaseDate.disabled = purchaseDateUnknown;
+  elements.form.warrantyMonths.disabled = warrantyMonthsUnknown;
+
+  if (purchaseDateUnknown) {
+    elements.form.purchaseDate.value = "";
+  }
+  if (warrantyMonthsUnknown) {
+    elements.form.warrantyMonths.value = "";
+  }
+}
+
 function openModal(computer = null) {
   if (!state.auth.isAuthenticated) return;
   state.editingId = computer ? computer.id : null;
@@ -878,6 +924,11 @@ function openModal(computer = null) {
   elements.computerTemplateSelect.value = "";
   elements.modalTitle.textContent = computer ? "Editar Computador" : "Adicionar Novo Computador";
   fillComputerForm(computer);
+  if (!computer) {
+    elements.purchaseDateUnknown.checked = false;
+    elements.warrantyMonthsUnknown.checked = false;
+    syncComputerOptionalFields();
+  }
   elements.modalLayer.classList.remove("hidden");
   elements.modalLayer.classList.add("flex");
   if (!computer) {
@@ -890,18 +941,23 @@ function closeModal() {
   elements.form.reset();
   elements.computerTemplateSelect.value = "";
   elements.computerTemplateSection.classList.remove("hidden");
+  syncComputerOptionalFields();
   elements.modalLayer.classList.add("hidden");
   elements.modalLayer.classList.remove("flex");
 }
 
 async function upsertComputer(formData) {
+  const rawWarrantyMonths = String(formData.get("warrantyMonths") || "").trim();
+  const warrantyMonths = elements.warrantyMonthsUnknown.checked || !rawWarrantyMonths
+    ? null
+    : parseOptionalNonNegativeNumber(rawWarrantyMonths);
   const payload = {
     owner: formData.get("owner").trim(),
     company: String(formData.get("company") || "").trim(),
     serial: formData.get("serial").trim(),
     machine: formData.get("machine").trim(),
-    purchaseDate: String(formData.get("purchaseDate") || ""),
-    warrantyMonths: Number(formData.get("warrantyMonths") || 0),
+    purchaseDate: elements.purchaseDateUnknown.checked ? "" : String(formData.get("purchaseDate") || "").trim(),
+    warrantyMonths,
     cpu: formData.get("cpu").trim(),
     ram: formData.get("ram").trim(),
     gpu: formData.get("gpu").trim(),
@@ -910,13 +966,19 @@ async function upsertComputer(formData) {
     deviceStatus: String(formData.get("deviceStatus") || "ativo"),
     corporateEmail: String(formData.get("corporateEmail") || "").trim().toLowerCase(),
     os: formData.get("os").trim(),
+    machinePassword: String(formData.get("machinePassword") || "").trim(),
     notes: formData.get("notes").trim()
   };
-  payload.warrantyDays = payload.warrantyMonths * 30;
+  payload.warrantyDays = !payload.purchaseDate || payload.warrantyMonths === null
+    ? 0
+    : payload.warrantyMonths * 30;
   payload.specs = buildSpecs(payload);
 
   if (!payload.owner || !payload.serial) {
     throw new Error("Dono e numero de serie sao obrigatorios.");
+  }
+  if (!elements.warrantyMonthsUnknown.checked && rawWarrantyMonths && payload.warrantyMonths === null) {
+    throw new Error("Informe um tempo de garantia valido ou marque como nao informado.");
   }
   if (!state.auth.token) {
     throw new Error("Sessao invalida. Faca login novamente.");
@@ -1020,7 +1082,7 @@ function viewComputer(id) {
   if (!computer) return;
   const remaining = getRemainingDays(computer);
   window.alert(
-    `Dono: ${computer.owner}\nEmpresa atual: ${computer.company || "-"}\nEmail corporativo: ${computer.corporateEmail || "-"}\nSerie: ${computer.serial}\nMaquina: ${computer.machine || "-"}\nStatus: ${statusLabel(computer.deviceStatus)}\nData de compra: ${computer.purchaseDate || "-"}\nGarantia: ${computer.warrantyMonths ?? "-"} meses\nRestante: ${formatRemaining(remaining)}\nCPU: ${computer.cpu || "-"}\nRAM: ${computer.ram || "-"}\nGPU: ${computer.gpu || "-"}\nArmazenamento: ${computer.storage || "-"} ${computer.storageType || ""}\nSO: ${computer.os || "-"}\nObservacoes: ${computer.notes || "-"}`
+    `Dono: ${computer.owner}\nEmpresa atual: ${computer.company || "-"}\nEmail corporativo: ${computer.corporateEmail || "-"}\nSerie: ${computer.serial}\nMaquina: ${computer.machine || "-"}\nStatus: ${statusLabel(computer.deviceStatus)}\nData de compra: ${computer.purchaseDate || "Nao informada"}\nGarantia: ${formatWarrantyMonthsLabel(computer.warrantyMonths)}\nRestante: ${formatRemaining(remaining)}\nCPU: ${computer.cpu || "-"}\nRAM: ${computer.ram || "-"}\nGPU: ${computer.gpu || "-"}\nArmazenamento: ${computer.storage || "-"} ${computer.storageType || ""}\nSO: ${computer.os || "-"}\nSenha da maquina: ${computer.machinePassword || "-"}\nObservacoes: ${computer.notes || "-"}`
   );
 }
 
@@ -1049,6 +1111,7 @@ const CSV_COLUMNS = [
   { key: "storage", header: "armazenamento", aliases: ["storage"], example: "512 GB", width: 18 },
   { key: "storageType", header: "tipo_armazenamento", aliases: ["storagetype", "tipodearmazenamento"], example: "SSD", width: 18 },
   { key: "os", header: "sistema_operacional", aliases: ["sistemaoperacional", "operatingsystem", "os"], example: "Windows 11 Pro", width: 22 },
+  { key: "machinePassword", header: "senha_maquina", aliases: ["senhadamaquina", "machinepassword", "localpassword"], example: "Senha@123", width: 20 },
   { key: "notes", header: "observacoes", aliases: ["notes"], example: "Notebook do comercial", width: 28 },
   { key: "warrantyDays", header: "garantia_dias", aliases: ["garantiadias", "warrantydays"], example: "360", width: 16 },
   { key: "specs", header: "specs", aliases: ["resumospecs"], example: "Intel Core i7 / 16 GB / 512 GB SSD / Windows 11 Pro", width: 42 },
@@ -1220,15 +1283,17 @@ function importCsv(file) {
             ? row.deviceStatus.toLowerCase()
             : "ativo",
           purchaseDate: row.purchaseDate || "",
-          warrantyMonths: Number(row.warrantyMonths || 0),
+          warrantyMonths: parseOptionalNonNegativeNumber(row.warrantyMonths),
           cpu: row.cpu?.trim() || "",
           ram: row.ram?.trim() || "",
           gpu: row.gpu?.trim() || "",
           storage: row.storage?.trim() || "",
           storageType: row.storageType?.trim() || "SSD",
           os: row.os?.trim() || "",
+          machinePassword: row.machinePassword?.trim() || "",
           notes: row.notes?.trim() || "",
-          warrantyDays: Number(row.warrantyDays || Number(row.warrantyMonths || 0) * 30 || 0),
+          warrantyDays: parseOptionalNonNegativeNumber(row.warrantyDays)
+            ?? ((row.purchaseDate || "") ? (parseOptionalNonNegativeNumber(row.warrantyMonths) ?? 0) * 30 : 0),
           specs: row.specs?.trim() || ""
         };
         normalized.specs = normalized.specs || buildSpecs(normalized);
@@ -1362,8 +1427,9 @@ function sortByCreatedAtDesc(items) {
 
 function normalizeMockComputer(payload, existingComputer = null) {
   const createdAt = existingComputer?.createdAt || new Date().toISOString();
-  const warrantyMonths = Number(payload.warrantyMonths || 0);
-  const warrantyDays = Number(payload.warrantyDays || (warrantyMonths > 0 ? warrantyMonths * 30 : 0));
+  const warrantyMonths = parseOptionalNonNegativeNumber(payload.warrantyMonths);
+  const warrantyDays = parseOptionalNonNegativeNumber(payload.warrantyDays)
+    ?? (payload.purchaseDate && (warrantyMonths ?? 0) > 0 ? warrantyMonths * 30 : 0);
   const computer = {
     id: existingComputer?.id || buildMockId("pc"),
     owner: String(payload.owner || "").trim(),
@@ -1381,6 +1447,7 @@ function normalizeMockComputer(payload, existingComputer = null) {
     storage: String(payload.storage || "").trim(),
     storageType: String(payload.storageType || "SSD").trim(),
     os: String(payload.os || "").trim(),
+    machinePassword: String(payload.machinePassword || "").trim(),
     notes: String(payload.notes || "").trim(),
     specs: String(payload.specs || "").trim(),
     createdAt
@@ -2176,6 +2243,8 @@ function bindEvents() {
   elements.modalLayer.addEventListener("click", (event) => {
     if (event.target === elements.modalLayer) closeModal();
   });
+  elements.purchaseDateUnknown.addEventListener("change", syncComputerOptionalFields);
+  elements.warrantyMonthsUnknown.addEventListener("change", syncComputerOptionalFields);
   elements.computerTemplateSelect.addEventListener("change", (event) => {
     applyComputerTemplate(event.target.value);
   });

@@ -146,7 +146,7 @@ function mapComputerRow(row) {
     deviceStatus: row.device_status || "ativo",
     corporateEmail: row.corporate_email || "",
     purchaseDate: row.purchase_date ? new Date(row.purchase_date).toISOString().slice(0, 10) : "",
-    warrantyMonths: Number(row.warranty_months || 0),
+    warrantyMonths: row.warranty_months === null ? null : Number(row.warranty_months || 0),
     warrantyDays: Number(row.warranty_days || 0),
     cpu: row.cpu || "",
     ram: row.ram || "",
@@ -154,6 +154,7 @@ function mapComputerRow(row) {
     storage: row.storage || "",
     storageType: row.storage_type || "SSD",
     os: row.operating_system || "",
+    machinePassword: row.machine_password || "",
     notes: row.notes || "",
     specs: row.specs || "",
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString()
@@ -1154,6 +1155,10 @@ app.delete("/api/corporate-emails/:id", authRequired, async (req, res) => {
 });
 
 function normalizeComputerPayload(body = {}) {
+  const rawWarrantyMonths = body.warrantyMonths === null || body.warrantyMonths === undefined
+    ? ""
+    : String(body.warrantyMonths).trim();
+  const parsedWarrantyMonths = rawWarrantyMonths === "" ? null : Number(rawWarrantyMonths);
   const payload = {
     owner: String(body.owner || "").trim(),
     company: String(body.company || "").trim(),
@@ -1162,13 +1167,14 @@ function normalizeComputerPayload(body = {}) {
     deviceStatus: String(body.deviceStatus || "ativo").trim().toLowerCase(),
     corporateEmail: normalizeEmail(body.corporateEmail || ""),
     purchaseDate: String(body.purchaseDate || "").trim(),
-    warrantyMonths: Number(body.warrantyMonths || 0),
+    warrantyMonths: Number.isFinite(parsedWarrantyMonths) && parsedWarrantyMonths >= 0 ? parsedWarrantyMonths : null,
     cpu: String(body.cpu || "").trim(),
     ram: String(body.ram || "").trim(),
     gpu: String(body.gpu || "").trim(),
     storage: String(body.storage || "").trim(),
     storageType: String(body.storageType || "SSD").trim(),
     os: String(body.os || "").trim(),
+    machinePassword: String(body.machinePassword || "").trim(),
     notes: String(body.notes || "").trim(),
     specs: String(body.specs || "").trim()
   };
@@ -1182,7 +1188,7 @@ function normalizeComputerPayload(body = {}) {
     payload.specs = specParts.join(" / ");
   }
 
-  payload.warrantyDays = Number.isFinite(payload.warrantyMonths) && payload.warrantyMonths > 0
+  payload.warrantyDays = payload.purchaseDate && Number.isFinite(payload.warrantyMonths) && payload.warrantyMonths > 0
     ? Math.round(payload.warrantyMonths * 30)
     : 0;
 
@@ -1244,10 +1250,11 @@ app.post("/api/computers", authRequired, async (req, res) => {
         storage,
         storage_type,
         operating_system,
+        machine_password,
         notes,
         specs,
         corporate_email_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`,
       [
         payload.owner,
         payload.company || null,
@@ -1263,6 +1270,7 @@ app.post("/api/computers", authRequired, async (req, res) => {
         payload.storage || null,
         payload.storageType || null,
         payload.os || null,
+        payload.machinePassword || null,
         payload.notes || null,
         payload.specs || "",
         corporateEmailId
@@ -1328,6 +1336,7 @@ app.put("/api/computers/:id", authRequired, async (req, res) => {
            storage = ?,
            storage_type = ?,
            operating_system = ?,
+           machine_password = ?,
            notes = ?,
            specs = ?,
            corporate_email_id = ?
@@ -1347,6 +1356,7 @@ app.put("/api/computers/:id", authRequired, async (req, res) => {
         payload.storage || null,
         payload.storageType || null,
         payload.os || null,
+        payload.machinePassword || null,
         payload.notes || null,
         payload.specs || "",
         corporateEmailId,
