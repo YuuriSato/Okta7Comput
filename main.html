@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OKTA7 Workspace</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
     <style>
       :root {
         --bg: #f4efe7;
@@ -25,7 +22,7 @@
 
       body {
         margin: 0;
-        font-family: "Space Grotesk", sans-serif;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         color: var(--ink);
         background:
           radial-gradient(circle at top left, rgba(215, 164, 65, 0.22), transparent 28%),
@@ -34,7 +31,7 @@
       }
 
       .serif {
-        font-family: "Instrument Serif", serif;
+        font-family: Georgia, "Times New Roman", serif;
       }
 
       .grid-glow::before {
@@ -126,12 +123,16 @@
             <span class="rounded-full bg-[rgba(215,164,65,0.14)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#8b5b00]">Em breve integrado</span>
           </div>
           <p class="mt-5 text-base leading-7 text-[var(--slate)]">
-            Tela separada para atendimento e operação, preparada para receber o Chatwoot e os módulos do GLPI sem depender da lógica do inventário.
+            Tela separada para atendimento e operação, preparada para receber o Chatwoot, o Asterisk e os módulos do GLPI sem depender da lógica do inventário.
           </p>
           <div class="mt-8 space-y-3">
             <div class="rounded-2xl border border-[rgba(16,20,24,0.08)] bg-white/80 p-4">
               <p class="text-xs uppercase tracking-[0.16em] text-[var(--slate)]">Chatwoot</p>
               <p class="mt-2 text-lg font-semibold">Atendimento conversacional e central de mensagens</p>
+            </div>
+            <div class="rounded-2xl border border-[rgba(16,20,24,0.08)] bg-white/80 p-4">
+              <p class="text-xs uppercase tracking-[0.16em] text-[var(--slate)]">Asterisk</p>
+              <p class="mt-2 text-lg font-semibold">Telefonia e chamadas operacionais do atendimento</p>
             </div>
             <div class="rounded-2xl border border-[rgba(16,20,24,0.08)] bg-white/80 p-4">
               <p class="text-xs uppercase tracking-[0.16em] text-[var(--slate)]">GLPI pátio</p>
