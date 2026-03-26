@@ -17,10 +17,24 @@
     <div id="app-shell" class="min-h-screen lg:flex">
       <aside class="w-full border-b border-slate-200 bg-white lg:flex lg:min-h-screen lg:w-72 lg:flex-col lg:border-b-0 lg:border-r">
         <div class="px-6 py-6 border-b border-slate-200">
-          <h2 class="text-2xl font-extrabold tracking-tight text-slate-900">Okta7Inventario</h2>
+          <a href="/main" class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 transition hover:text-slate-900">OKTA7 Workspace</a>
+          <h2 class="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">Okta7Inventario</h2>
+          <p class="mt-2 text-sm text-slate-500">Modulo de ativos, garantias e movimentacoes.</p>
         </div>
 
         <nav class="space-y-1 px-3 pb-6 pt-4">
+          <a href="/main" class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5.5v-6h-5v6H4a1 1 0 01-1-1v-9.5z" />
+            </svg>
+            Main
+          </a>
+          <a href="/service-desk" class="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6h16v9a2 2 0 01-2 2H9l-5 4V8a2 2 0 012-2z" />
+            </svg>
+            Service Desk
+          </a>
           <button data-nav="dashboard" class="nav-btn flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-medium transition hover:bg-slate-100">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 7h18M3 12h18M3 17h18" />
@@ -138,7 +152,7 @@
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div class="max-w-3xl">
                 <h2 class="text-2xl font-bold">Importação CSV / Excel</h2>
-                <p class="mt-1 text-slate-600">Importe planilhas salvas como CSV usando headers claros. Os campos obrigatórios são <span class="font-semibold text-slate-900">dono</span> e <span class="font-semibold text-slate-900">numero_serie</span>.</p>
+                <p class="mt-1 text-slate-600">Importe arquivos CSV ou Excel com headers claros. O sistema encontra a linha de cabeçalho automaticamente, inclusive no modelo exportado. Os campos obrigatórios são <span class="font-semibold text-slate-900">dono</span> e <span class="font-semibold text-slate-900">numero_serie</span>.</p>
                 <div class="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
                   <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">dono</span>
                   <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-700">empresa_atual</span>
@@ -182,8 +196,8 @@
               </div>
               <div class="flex flex-col gap-3 lg:min-w-[260px]">
                 <button id="download-csv-template" class="rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100">Baixar Modelo Excel</button>
-                <label for="import-csv-input" class="cursor-pointer rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-center text-sm font-semibold text-blue-700 hover:bg-blue-100">Selecionar Arquivo CSV</label>
-                <input id="import-csv-input" type="file" accept=".csv,text/csv" class="hidden" />
+                <label for="import-csv-input" class="cursor-pointer rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-center text-sm font-semibold text-blue-700 hover:bg-blue-100">Selecionar CSV ou Excel</label>
+                <input id="import-csv-input" type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" class="hidden" />
               </div>
             </div>
             <p id="import-feedback" class="mt-4 hidden rounded-lg border px-3 py-2 text-sm"></p>

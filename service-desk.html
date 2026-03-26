@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Service Desk | OKTA7</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Newsreader:opsz,wght@6..72,500;6..72,700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --panel: rgba(15, 20, 24, 0.72);
+        --panel-soft: rgba(255, 255, 255, 0.06);
+        --line: rgba(255, 255, 255, 0.1);
+        --ink: #f5efe6;
+        --muted: #aeb8ba;
+        --mint: #79d1ba;
+        --orange: #ffb347;
+        --rose: #ff8f70;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(121, 209, 186, 0.18), transparent 25%),
+          radial-gradient(circle at top right, rgba(255, 179, 71, 0.14), transparent 28%),
+          linear-gradient(180deg, #12181d 0%, #0c1014 100%);
+      }
+
+      .serif {
+        font-family: "Newsreader", serif;
+      }
+
+      .ambient::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+        background-size: 32px 32px;
+        mask-image: radial-gradient(circle at center, black 38%, transparent 85%);
+      }
+
+      .reveal {
+        animation: rise 700ms ease forwards;
+        opacity: 0;
+        transform: translateY(12px);
+      }
+
+      .reveal:nth-child(2) { animation-delay: 90ms; }
+      .reveal:nth-child(3) { animation-delay: 180ms; }
+      .reveal:nth-child(4) { animation-delay: 270ms; }
+
+      @keyframes rise {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
+  </head>
+  <body class="ambient min-h-screen">
+    <main class="mx-auto max-w-7xl px-6 py-8 lg:px-10">
+      <header class="reveal flex flex-col gap-5 rounded-[30px] border border-[var(--line)] bg-[var(--panel)] px-6 py-6 backdrop-blur md:flex-row md:items-center md:justify-between md:px-8">
+        <div>
+          <span class="inline-flex rounded-full border border-[rgba(121,209,186,0.22)] bg-[rgba(121,209,186,0.08)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-[var(--mint)]">Service Desk</span>
+          <h1 class="mt-4 text-5xl leading-none sm:text-6xl">
+            Atendimento e operação em uma
+            <span class="serif italic text-[var(--orange)]">central dedicada</span>
+          </h1>
+          <p class="mt-4 max-w-3xl text-base leading-7 text-[var(--muted)] sm:text-lg">
+            Página visual criada para receber os módulos de atendimento e operação da OKTA7. As integrações ainda não entraram; por enquanto a estrutura já está pronta para Chatwoot e GLPI.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <a href="/main" class="rounded-full border border-white/14 bg-white/6 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10">Voltar para Main</a>
+          <a href="/inventario" class="rounded-full border border-[rgba(121,209,186,0.22)] bg-[rgba(121,209,186,0.08)] px-5 py-3 text-sm font-semibold text-[var(--mint)] transition hover:bg-[rgba(121,209,186,0.14)]">Ir para Inventário</a>
+        </div>
+      </header>
+
+      <section class="mt-8 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <article class="reveal rounded-[32px] border border-[var(--line)] bg-[var(--panel)] p-7 shadow-[0_26px_70px_rgba(0,0,0,0.26)] backdrop-blur">
+          <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">Visão do módulo</p>
+              <h2 class="mt-3 text-3xl font-bold">Aba de Service Desk preparada para operação</h2>
+            </div>
+            <span class="inline-flex rounded-full bg-[rgba(255,179,71,0.12)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--orange)]">Somente visual</span>
+          </div>
+
+          <div class="mt-8 grid gap-4 md:grid-cols-3">
+            <div class="rounded-[24px] border border-[rgba(121,209,186,0.18)] bg-[rgba(121,209,186,0.08)] p-5">
+              <p class="text-xs uppercase tracking-[0.18em] text-[var(--mint)]">Chatwoot</p>
+              <p class="mt-3 text-xl font-bold">Canal de atendimento</p>
+              <p class="mt-3 text-sm leading-6 text-[var(--muted)]">Espaço reservado para mensagens, conversas, triagem inicial e visibilidade da equipe.</p>
+            </div>
+            <div class="rounded-[24px] border border-[rgba(255,179,71,0.18)] bg-[rgba(255,179,71,0.08)] p-5">
+              <p class="text-xs uppercase tracking-[0.18em] text-[var(--orange)]">GLPI Pátio</p>
+              <p class="mt-3 text-xl font-bold">Parque e disponibilidade</p>
+              <p class="mt-3 text-sm leading-6 text-[var(--muted)]">Área visual para organizar máquinas em estoque, manutenção, reserva e prontas para uso.</p>
+            </div>
+            <div class="rounded-[24px] border border-[rgba(255,143,112,0.18)] bg-[rgba(255,143,112,0.08)] p-5">
+              <p class="text-xs uppercase tracking-[0.18em] text-[var(--rose)]">GLPI Chamados</p>
+              <p class="mt-3 text-xl font-bold">Tickets e rotina</p>
+              <p class="mt-3 text-sm leading-6 text-[var(--muted)]">Bloco pensado para fila de chamados, prioridade, SLA e acompanhamento operacional.</p>
+            </div>
+          </div>
+        </article>
+
+        <aside class="reveal rounded-[32px] border border-[var(--line)] bg-[#131a20] p-7 shadow-[0_26px_70px_rgba(0,0,0,0.26)]">
+          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">Painel previsto</p>
+          <h2 class="mt-3 text-3xl font-bold">Estrutura já desenhada para as integrações</h2>
+          <div class="mt-6 space-y-4">
+            <div class="rounded-[24px] border border-white/8 bg-white/5 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <p class="font-semibold">Hub de atendimento</p>
+                <span class="rounded-full bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--mint)]">Chatwoot</span>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-[var(--muted)]">Inbox, status da conversa, origem do contato e prioridade inicial.</p>
+            </div>
+            <div class="rounded-[24px] border border-white/8 bg-white/5 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <p class="font-semibold">Pátio de máquinas</p>
+                <span class="rounded-full bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--orange)]">GLPI</span>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-[var(--muted)]">Reserva, manutenção, disponibilidade e visão rápida do parque parado.</p>
+            </div>
+            <div class="rounded-[24px] border border-white/8 bg-white/5 p-4">
+              <div class="flex items-center justify-between gap-3">
+                <p class="font-semibold">Fila de chamados</p>
+                <span class="rounded-full bg-white/8 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--rose)]">GLPI</span>
+              </div>
+              <p class="mt-3 text-sm leading-6 text-[var(--muted)]">Categorias, responsável, fila atual, SLA e pendências.</p>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="mt-8 grid gap-6 lg:grid-cols-3">
+        <article class="reveal rounded-[30px] border border-[var(--line)] bg-[var(--panel-soft)] p-6 backdrop-blur">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Fluxo 01</p>
+          <h3 class="mt-3 text-2xl font-bold">Entrada e triagem</h3>
+          <p class="mt-4 text-sm leading-7 text-[var(--muted)]">Bloco pensado para concentrar a entrada via Chatwoot, identificar contexto e encaminhar a operação.</p>
+        </article>
+        <article class="reveal rounded-[30px] border border-[var(--line)] bg-[var(--panel-soft)] p-6 backdrop-blur">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Fluxo 02</p>
+          <h3 class="mt-3 text-2xl font-bold">Pátio e ativos</h3>
+          <p class="mt-4 text-sm leading-7 text-[var(--muted)]">Área visual dedicada ao GLPI para o parque de máquinas, estado do equipamento e disponibilidade operacional.</p>
+        </article>
+        <article class="reveal rounded-[30px] border border-[var(--line)] bg-[var(--panel-soft)] p-6 backdrop-blur">
+          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--muted)]">Fluxo 03</p>
+          <h3 class="mt-3 text-2xl font-bold">Chamados e SLA</h3>
+          <p class="mt-4 text-sm leading-7 text-[var(--muted)]">Painel pronto para o gerenciamento de tickets com prioridade, acompanhamento e resolução.</p>
+        </article>
+      </section>
+
+      <section class="mt-8 rounded-[32px] border border-[var(--line)] bg-[var(--panel)] p-7 backdrop-blur">
+        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--muted)]">Mock operacional</p>
+            <h2 class="mt-3 text-3xl font-bold">Composição visual da futura rotina</h2>
+          </div>
+          <span class="text-sm text-[var(--muted)]">Sem dados reais por enquanto</span>
+        </div>
+
+        <div class="mt-8 grid gap-4 xl:grid-cols-3">
+          <div class="rounded-[24px] border border-white/8 bg-white/5 p-5">
+            <p class="text-sm font-semibold text-white">Fila rápida</p>
+            <div class="mt-4 space-y-3">
+              <div class="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <p class="text-xs uppercase tracking-[0.18em] text-[var(--mint)]">Novo contato</p>
+                <p class="mt-2 font-semibold">Chatwoot: primeiro atendimento</p>
+              </div>
+              <div class="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <p class="text-xs uppercase tracking-[0.18em] text-[var(--orange)]">Estoque</p>
+                <p class="mt-2 font-semibold">GLPI: validar máquina em pátio</p>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-[24px] border border-white/8 bg-white/5 p-5">
+            <p class="text-sm font-semibold text-white">Colunas previstas</p>
+            <div class="mt-4 grid gap-3">
+              <div class="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <p class="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Triagem</p>
+                <p class="mt-2 font-semibold">Entender contexto e canal</p>
+              </div>
+              <div class="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <p class="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Operação</p>
+                <p class="mt-2 font-semibold">Direcionar para chamado ou pátio</p>
+              </div>
+              <div class="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <p class="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">Fechamento</p>
+                <p class="mt-2 font-semibold">Retorno ao usuário e acompanhamento</p>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-[24px] border border-white/8 bg-white/5 p-5">
+            <p class="text-sm font-semibold text-white">Integrações planejadas</p>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <span class="rounded-full border border-[rgba(121,209,186,0.2)] bg-[rgba(121,209,186,0.08)] px-3 py-1 text-xs font-semibold text-[var(--mint)]">Chatwoot Inbox</span>
+              <span class="rounded-full border border-[rgba(255,179,71,0.2)] bg-[rgba(255,179,71,0.08)] px-3 py-1 text-xs font-semibold text-[var(--orange)]">GLPI Pátio</span>
+              <span class="rounded-full border border-[rgba(255,143,112,0.2)] bg-[rgba(255,143,112,0.08)] px-3 py-1 text-xs font-semibold text-[var(--rose)]">GLPI Tickets</span>
+              <span class="rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs font-semibold text-white/76">SLA</span>
+              <span class="rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs font-semibold text-white/76">Operação</span>
+              <span class="rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs font-semibold text-white/76">Estoque</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

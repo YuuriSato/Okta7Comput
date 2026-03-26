@@ -1351,66 +1351,219 @@ function exportCsv() {
   }
 }
 
-function importCsv(file) {
-  const reader = new FileReader();
-  reader.onload = async (event) => {
-    const text = String(event.target?.result || "");
-    const lines = text.split(/\r?\n/).filter(Boolean);
-    if (lines.length < 2) {
-      setImportFeedback("CSV sem dados validos.", "error");
-      return;
-    }
+function readFileAsText(file, encoding = "utf-8") {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => resolve(String(event.target?.result || ""));
+    reader.onerror = () => reject(new Error("Falha ao ler o arquivo selecionado."));
+    reader.readAsText(file, encoding);
+  });
+}
 
-    const startIndex = lines[0].toLowerCase().startsWith("sep=") ? 1 : 0;
-    const delimiter = lines[startIndex].includes(";") ? ";" : ",";
-    const rawHeaders = parseCsvLine(lines[startIndex], delimiter).map((h) => h.replace(/(^"|"$)/g, "").trim());
-    const headers = rawHeaders.map(normalizeCsvHeader);
-    const required = CSV_COLUMNS.filter((column) => column.required).map((column) => column.key);
-    const missing = required.filter((key) => !headers.includes(key));
-    if (missing.length) {
-      const expected = CSV_COLUMNS.filter((column) => missing.includes(column.key)).map((column) => column.header);
-      setImportFeedback(`CSV invalido. Campos obrigatorios ausentes: ${expected.join(", ")}.`, "error");
-      return;
-    }
+function readFileAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => resolve(event.target?.result);
+    reader.onerror = () => reject(new Error("Falha ao ler o arquivo selecionado."));
+    reader.readAsArrayBuffer(file);
+  });
+}
 
-    const imported = lines
-      .slice(startIndex + 1)
-      .map((line) => {
-        const values = parseCsvLine(line, delimiter);
-        const row = Object.fromEntries(headers.map((key, idx) => [key, values[idx] || ""]));
-        // A importacao converte tudo para o formato que a API ja espera, evitando regras duplicadas depois.
-        const normalized = {
-          owner: row.owner.trim(),
-          company: row.company?.trim() || "",
-          corporateEmail: row.corporateEmail?.trim().toLowerCase() || "",
-          serial: row.serial.trim(),
-          machine: row.machine?.trim() || "",
-          deviceStatus: ["ativo", "inativo", "pendente"].includes((row.deviceStatus || "").toLowerCase())
-            ? row.deviceStatus.toLowerCase()
-            : "ativo",
-          purchaseDate: row.purchaseDate || "",
-          warrantyMonths: parseOptionalNonNegativeNumber(row.warrantyMonths),
-          cpu: row.cpu?.trim() || "",
-          ram: row.ram?.trim() || "",
-          gpu: row.gpu?.trim() || "",
-          storage: row.storage?.trim() || "",
-          storageType: row.storageType?.trim() || "SSD",
-          os: row.os?.trim() || "",
-          machinePassword: row.machinePassword?.trim() || "",
-          notes: row.notes?.trim() || "",
-          warrantyDays: parseOptionalNonNegativeNumber(row.warrantyDays)
-            ?? ((row.purchaseDate || "") ? (parseOptionalNonNegativeNumber(row.warrantyMonths) ?? 0) * 30 : 0),
-          specs: row.specs?.trim() || ""
-        };
-        normalized.specs = normalized.specs || buildSpecs(normalized);
-        return normalized;
-      })
-      .filter((item) => item.owner && item.serial);
+function getImportRequiredHeaders() {
+  return CSV_COLUMNS.filter((column) => column.required).map((column) => column.key);
+}
 
-    if (!imported.length) {
-      setImportFeedback("Nenhuma linha valida encontrada para importar.", "error");
-      return;
+function isKnownImportHeader(key) {
+  return CSV_COLUMNS.some((column) => column.key === key) || Object.values(LEGACY_CSV_HEADER_MAP).includes(key);
+}
+
+function scoreImportHeaderRow(row = []) {
+  const normalizedHeaders = row.map(normalizeCsvHeader);
+  const recognized = normalizedHeaders.filter((key) => isKnownImportHeader(key)).length;
+  const requiredMatches = getImportRequiredHeaders().filter((key) => normalizedHeaders.includes(key)).length;
+  return { recognized, requiredMatches };
+}
+
+function findImportHeaderRowIndex(rows = []) {
+  const requiredCount = getImportRequiredHeaders().length;
+  let bestIndex = -1;
+  let bestScore = -1;
+
+  rows.slice(0, 25).forEach((row, index) => {
+    const { recognized, requiredMatches } = scoreImportHeaderRow(row);
+    if (requiredMatches < requiredCount || !recognized) return;
+    const score = (requiredMatches * 100) + recognized;
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
     }
+  });
+
+  return bestIndex;
+}
+
+function normalizeImportedText(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
+function excelSerialToIsoDate(serial) {
+  if (!Number.isFinite(serial)) return "";
+  const excelEpoch = Date.UTC(1899, 11, 30);
+  const date = new Date(excelEpoch + Math.round(serial * 86400000));
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeImportedDate(value, options = {}) {
+  const { keepTime = false } = options;
+  if (value === null || value === undefined || value === "") return "";
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? "" : (keepTime ? value.toISOString() : value.toISOString().slice(0, 10));
+  }
+
+  if (typeof value === "number") {
+    const isoDate = excelSerialToIsoDate(value);
+    return keepTime ? (isoDate ? `${isoDate}T00:00:00.000Z` : "") : isoDate;
+  }
+
+  const text = String(value).trim();
+  if (!text) return "";
+
+  const isoMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+  if (isoMatch) {
+    return keepTime && text.includes("T") ? text : `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const dateMatch = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})(?:\s+.*)?$/);
+  if (dateMatch) {
+    let [, first, second, year] = dateMatch;
+    if (year.length === 2) {
+      year = Number(year) >= 70 ? `19${year}` : `20${year}`;
+    }
+    let day = Number(first);
+    let month = Number(second);
+    if (day <= 12 && month > 12) {
+      day = Number(second);
+      month = Number(first);
+    }
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return keepTime ? text : "";
+  return keepTime ? parsed.toISOString() : parsed.toISOString().slice(0, 10);
+}
+
+function buildImportedComputerPayload(row = {}) {
+  const normalized = {
+    owner: normalizeImportedText(row.owner),
+    company: normalizeImportedText(row.company),
+    corporateEmail: normalizeImportedText(row.corporateEmail).toLowerCase(),
+    serial: normalizeImportedText(row.serial),
+    machine: normalizeImportedText(row.machine),
+    deviceStatus: ["ativo", "inativo", "pendente"].includes(normalizeImportedText(row.deviceStatus).toLowerCase())
+      ? normalizeImportedText(row.deviceStatus).toLowerCase()
+      : "ativo",
+    purchaseDate: normalizeImportedDate(row.purchaseDate),
+    warrantyMonths: parseOptionalNonNegativeNumber(row.warrantyMonths),
+    cpu: normalizeImportedText(row.cpu),
+    ram: normalizeImportedText(row.ram),
+    gpu: normalizeImportedText(row.gpu),
+    storage: normalizeImportedText(row.storage),
+    storageType: normalizeImportedText(row.storageType) || "SSD",
+    os: normalizeImportedText(row.os),
+    machinePassword: normalizeImportedText(row.machinePassword),
+    notes: normalizeImportedText(row.notes),
+    warrantyDays: parseOptionalNonNegativeNumber(row.warrantyDays),
+    specs: normalizeImportedText(row.specs)
+  };
+
+  normalized.warrantyDays = normalized.warrantyDays
+    ?? (normalized.purchaseDate ? (parseOptionalNonNegativeNumber(row.warrantyMonths) ?? 0) * 30 : 0);
+  normalized.specs = normalized.specs || buildSpecs(normalized);
+  return normalized;
+}
+
+function parseCsvTextToRows(text) {
+  const lines = String(text || "").split(/\r?\n/).filter((line) => line.trim() !== "");
+  if (!lines.length) return [];
+  const startIndex = lines[0].toLowerCase().startsWith("sep=") ? 1 : 0;
+  const referenceLine = lines.find((line, index) => index >= startIndex && line.trim()) || "";
+  const delimiter = referenceLine.includes(";") ? ";" : ",";
+  return lines
+    .slice(startIndex)
+    .map((line) => parseCsvLine(line, delimiter).map((value) => String(value || "").trim()));
+}
+
+function parseSpreadsheetRows(rows = []) {
+  const preparedRows = rows
+    .map((row) => Array.isArray(row) ? row : [])
+    .map((row) => row.map((value) => (value === null || value === undefined ? "" : value)));
+  const headerRowIndex = findImportHeaderRowIndex(preparedRows);
+
+  if (headerRowIndex === -1) {
+    const expected = CSV_COLUMNS.filter((column) => column.required).map((column) => column.header).join(", ");
+    throw new Error(`Planilha invalida. Nao encontrei uma linha de cabecalho com os campos obrigatorios: ${expected}.`);
+  }
+
+  const rawHeaders = preparedRows[headerRowIndex].map((value) => normalizeImportedText(value));
+  const headers = rawHeaders.map(normalizeCsvHeader);
+  const required = getImportRequiredHeaders();
+  const missing = required.filter((key) => !headers.includes(key));
+  if (missing.length) {
+    const expected = CSV_COLUMNS.filter((column) => missing.includes(column.key)).map((column) => column.header);
+    throw new Error(`Planilha invalida. Campos obrigatorios ausentes: ${expected.join(", ")}.`);
+  }
+
+  const imported = preparedRows
+    .slice(headerRowIndex + 1)
+    .map((values) => Object.fromEntries(headers.map((key, idx) => [key, values[idx] ?? ""])))
+    .map((row) => buildImportedComputerPayload(row))
+    .filter((item) => item.owner && item.serial);
+
+  if (!imported.length) {
+    throw new Error("Nenhuma linha valida encontrada para importar.");
+  }
+
+  return imported;
+}
+
+async function readSpreadsheetRows(file) {
+  const fileName = String(file?.name || "").toLowerCase();
+  if (fileName.endsWith(".csv")) {
+    const text = await readFileAsText(file, "utf-8");
+    return parseCsvTextToRows(text);
+  }
+
+  if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+    if (!window.XLSX?.read || !window.XLSX?.utils?.sheet_to_json) {
+      throw new Error("A leitura de Excel nao esta disponivel agora. Tente novamente ou use CSV.");
+    }
+    const data = await readFileAsArrayBuffer(file);
+    const workbook = window.XLSX.read(data, { type: "array", cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      throw new Error("A planilha Excel nao possui abas para importar.");
+    }
+    return window.XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+      header: 1,
+      raw: true,
+      defval: "",
+      blankrows: false
+    });
+  }
+
+  throw new Error("Formato nao suportado. Envie um arquivo CSV ou Excel (.xlsx).");
+}
+
+async function importSpreadsheet(file) {
+  try {
+    const rows = await readSpreadsheetRows(file);
+    const imported = parseSpreadsheetRows(rows);
 
     if (!state.auth.token) {
       setImportFeedback("Sessao invalida. Faca login novamente.", "error");
@@ -1435,8 +1588,9 @@ function importCsv(file) {
       return;
     }
     setImportFeedback(`${successCount} computador(es) importado(s) com sucesso a partir de ${file.name}.`, "ok");
-  };
-  reader.readAsText(file, "utf-8");
+  } catch (error) {
+    setImportFeedback(error.message || "Falha ao importar a planilha.", "error");
+  }
 }
 
 function parseCsvLine(line, delimiter = ",") {
@@ -2674,7 +2828,7 @@ function bindEvents() {
     const file = event.target.files?.[0];
     if (!file) return;
     setImportFeedback(`Importando ${file.name}...`, "ok");
-    importCsv(file);
+    importSpreadsheet(file);
     event.target.value = "";
   });
 

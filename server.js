@@ -1560,9 +1560,15 @@ app.delete("/api/computers/:id", authRequired, computerPermissionRequired("delet
 });
 
 // Em deploy (Render), o mesmo serviço pode responder o frontend estatico.
-app.use(express.static(__dirname));
-app.get("/", (_req, res) => {
+app.use(express.static(__dirname, { index: false }));
+app.get(["/", "/main"], (_req, res) => {
+  res.sendFile(path.join(__dirname, "main.html"));
+});
+app.get("/inventario", (_req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
+});
+app.get("/service-desk", (_req, res) => {
+  res.sendFile(path.join(__dirname, "service-desk.html"));
 });
 
 app.use((err, _req, res, _next) => {
